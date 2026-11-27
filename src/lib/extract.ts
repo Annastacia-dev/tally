@@ -48,7 +48,21 @@ export function hasClaude() {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
-export async function extractWithClaude(email: EmailInput): Promise<Extraction | null> {
+export type Usage = { inputTokens: number; outputTokens: number };
+
+/** Claude cannot be used at all right now (no credits, bad key, no access). Retrying will not help. */
+export class ClaudeUnavailableError extends Error {}
+
+function unavailable(err: unknown): string | null {
+  if (err instanceof Anthropic.AuthenticationError) return "The Anthropic API key was rejected. Check ANTHROPIC_API_KEY.";
+  if (err instanceof Anthropic.PermissionDeniedError) return "This Anthropic API key cannot use the extraction model.";
+  if (err instanceof Anthropic.BadRequestError && /credit balance/i.test(err.message)) {
+    return "Your Anthropic credit balance ran out, so the scan stopped. Emails already read are kept. Add credits and scan again.";
+  }
+  return null;
+}
+
+export async function extractWithClaude(email: EmailInput): Promise<{ x: Extraction | null; usage: Usage }> {
   const response = await anthropic().beta.messages.parse({
     model: MODEL,
     max_tokens: 4000,
@@ -63,8 +77,9 @@ export async function extractWithClaude(email: EmailInput): Promise<Extraction |
       },
     ],
   });
-  if (response.stop_reason === "refusal") return null;
-  return response.parsed_output ?? null;
+  const usage = { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens };
+  if (response.stop_reason === "refusal") return { x: null, usage };
+  return { x: response.parsed_output ?? null, usage };
 }
 
 // ---------------------------------------------------------------------------
@@ -112,14 +127,39 @@ export function extractWithRules(email: EmailInput): Extraction {
   };
 }
 
-export async function extract(email: EmailInput): Promise<Extraction | null> {
+export type ExtractResult = { x: Extraction | null; by: "claude" | "rules"; usage: Usage };
+
+/**
+ * Claude when a key is set, the rules otherwise. If Claude cannot be used at
+ * all (no credits, bad key), this throws instead of quietly using the rules,
+ * so a scan stops rather than filling up with worse results.
+ */
+export async function extract(email: EmailInput): Promise<ExtractResult> {
+  const none = { inputTokens: 0, outputTokens: 0 };
   if (hasClaude()) {
     try {
-      return await extractWithClaude(email);
+      return { ...(await extractWithClaude(email)), by: "claude" };
     } catch (err) {
+      const reason = unavailable(err);
+      if (reason) throw new ClaudeUnavailableError(reason);
       if (err instanceof Anthropic.RateLimitError) throw err;
+      // A one-off failure on this email: the rules are better than nothing.
       console.error(`[extract] Claude failed for ${email.id}, using rules`, err);
+      return { x: extractWithRules(email), by: "rules", usage: none };
     }
   }
-  return extractWithRules(email);
+  return { x: extractWithRules(email), by: "rules", usage: none };
+}
+
+// Price per million tokens, input and output, for the cost shown after a scan.
+const PRICES: Record<string, [number, number]> = {
+  "claude-opus-5-5": [4, 20],
+  "claude-sonnet-5-5": [2, 10],
+  "claude-haiku-5-5": [0.1, 0.5],
+};
+
+/** Approximate cost in US dollars, or null for a model we have no price for. */
+export function costUsd(usage: Usage, model = MODEL): number | null {
+  const p = PRICES[model];
+  return p ? (usage.inputTokens * p[0] + usage.outputTokens * p[1]) / 1_000_000 : null;
 }

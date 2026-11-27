@@ -1,6 +1,6 @@
 import { prisma } from "./db";
 import { addCycle, inferSubscription, type Cycle } from "./cycles";
-import { extract, type EmailInput } from "./extract";
+import { extract, hasClaude, type EmailInput } from "./extract";
 import { findBankRecurring, readBankStatement } from "./bank";
 import { findRecurring, parseStatementText, pdfToText } from "./mpesa";
 import { cleanServiceName, displayName, serviceKey, serviceMeta } from "./services";
@@ -50,13 +50,20 @@ export async function ingestEmails(userId: string, scanId: string, ids: string[]
 
   let processed = ids.length - todo.length;
   let stored = 0;
+  const tokens = { inputTokens: 0, outputTokens: 0 };
   try {
     await mapLimit(todo, 4, async (id) => {
       const email = await load(id);
-      const x = await extract(email);
-      await prisma.readEmail.createMany({ data: [{ userId, messageId: id }], skipDuplicates: true });
+      const { x, by, usage } = await extract(email);
+      tokens.inputTokens += usage.inputTokens;
+      tokens.outputTokens += usage.outputTokens;
+      // Only count an email as read once Claude has read it (or when Claude is
+      // not set up), so a fallback result is retried by a later scan.
+      if (by === "claude" || !hasClaude()) {
+        await prisma.readEmail.createMany({ data: [{ userId, messageId: id }], skipDuplicates: true });
+      }
     processed++;
-    if (processed % 5 === 0) await prisma.scan.update({ where: { id: scanId }, data: { processed } });
+    if (processed % 5 === 0) await prisma.scan.update({ where: { id: scanId }, data: { processed, ...tokens } });
     if (!x || !x.is_subscription_charge || !x.service_name || x.amount <= 0 || x.confidence < MIN_CONFIDENCE) return;
 
     const chargedAt = new Date(x.charge_date);
@@ -80,13 +87,13 @@ export async function ingestEmails(userId: string, scanId: string, ids: string[]
     });
   } finally {
     // Keep whatever was found, even if the scan stopped part way.
-    await prisma.scan.update({ where: { id: scanId }, data: { processed } });
+    await prisma.scan.update({ where: { id: scanId }, data: { processed, ...tokens } });
     if (stored > 0) await rebuildSubscriptions(userId);
   }
 
   await prisma.scan.update({ where: { id: scanId }, data: { status: "done", finishedAt: new Date() } });
   if (stored === 0) await rebuildSubscriptions(userId);
-  return { emails: ids.length, newCharges: stored };
+  return { emails: ids.length, newCharges: stored, ...tokens };
 }
 
 export type StatementResult = {

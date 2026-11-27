@@ -3,7 +3,7 @@ import { requireUser } from "@/auth";
 import { StatementUpload, RemindNow, ScanButton } from "@/components/SourceActions";
 import { fmtDate } from "@/lib/dates";
 import { prisma } from "@/lib/db";
-import { hasClaude, MODEL } from "@/lib/extract";
+import { costUsd, hasClaude, MODEL } from "@/lib/extract";
 import { resetData, updateSettings } from "../../actions";
 
 export const maxDuration = 300;
@@ -16,6 +16,11 @@ export default async function Sources() {
     prisma.account.findFirst({ where: { userId: user.id, provider: "google" } }),
   ]);
   const lastEmail = scans.find((s) => s.kind === "gmail" || s.kind === "fixtures");
+  const lastTokens = lastEmail ? lastEmail.inputTokens + lastEmail.outputTokens : 0;
+  const lastCost = lastEmail ? costUsd(lastEmail) : null;
+  const lastScanCost = lastTokens
+    ? ` · used ${lastTokens.toLocaleString()} tokens${lastCost !== null ? `, about US$${lastCost.toFixed(2)}` : ""}`
+    : "";
 
   return (
     <div className="space-y-5">
@@ -39,7 +44,11 @@ export default async function Sources() {
             <p className="mt-1 text-xs text-ink-2">
               Extraction: {hasClaude() ? `Claude (${MODEL})` : "built-in rules (set ANTHROPIC_API_KEY to use Claude)"}
               {lastEmail && ` · last scan ${fmtDate(lastEmail.startedAt, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}, ${lastEmail.status}`}
+              {lastScanCost}
             </p>
+            {lastEmail?.status === "failed" && lastEmail.error && (
+              <p className="mt-1 text-xs font-semibold text-warn">{lastEmail.error.slice(0, 200)}</p>
+            )}
             <div className="mt-4">
               <ScanButton label={lastEmail ? "Scan again" : user.isDemo ? "Scan sample inbox" : "Scan my inbox"} />
             </div>

@@ -6,6 +6,7 @@ import { requireUser, signIn, signOut } from "@/auth";
 import { fixtureEmails } from "@/fixtures/emails";
 import { addCycle, type Cycle } from "@/lib/cycles";
 import { prisma } from "@/lib/db";
+import { costUsd } from "@/lib/extract";
 import { fetchEmail, listBillingMessageIds } from "@/lib/gmail";
 import { alreadyRead, ingestEmails, ingestStatement } from "@/lib/pipeline";
 import { runReminders, sendTestEmail } from "@/lib/reminders";
@@ -53,7 +54,10 @@ export async function scanInbox(): Promise<ActionResult> {
       res = await ingestEmails(user.id, scan.id, ids, (id) => fetchEmail(token, id));
     }
     refresh();
-    return { ok: true, message: `Read ${res.emails} emails and found ${res.newCharges} new charges.` };
+    const tokens = res.inputTokens + res.outputTokens;
+    const cost = costUsd(res);
+    const spent = tokens ? ` Claude used ${tokens.toLocaleString()} tokens${cost !== null ? ` (about US$${cost.toFixed(2)})` : ""}.` : "";
+    return { ok: true, message: `Read ${res.emails} emails and found ${res.newCharges} new charges.${spent}` };
   } catch (err) {
     refresh();
     const message = err instanceof Error ? err.message : String(err);
