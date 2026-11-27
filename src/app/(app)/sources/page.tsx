@@ -62,20 +62,36 @@ export default async function Sources() {
         <div className="flex items-start gap-4">
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-mint/20 text-2xl" aria-hidden>📱</span>
           <div className="flex-1">
-            <h2 className="font-display text-lg font-bold">M-Pesa or bank statement</h2>
+            <h2 className="font-display text-lg font-bold">M-Pesa statement</h2>
             <p className="text-sm text-ink-2">
-              Many subscriptions have no email receipt. Upload a PDF statement and we look for payments you make on a regular schedule.
-              For M-Pesa, open the M-PESA app, go to <b>Statements</b> and request a full statement. For a bank or card account,
-              download a statement covering at least three months from your bank&apos;s app or website. Remove any PDF password first.
+              Many subscriptions are paid by paybill or till and have no email receipt. Open the M-PESA app, go to{" "}
+              <b>Statements</b> and request a full statement, then upload the PDF. We look for payments you make on a regular
+              schedule. Remove the PDF password first.
+            </p>
+            <p className="mt-1 text-xs text-ink-2">Read on our server. Nothing is sent to Claude.</p>
+            <div className="mt-4">
+              <StatementUpload demo={user.isDemo} kind="mpesa" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="card p-5 sm:p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-pink/20 text-2xl" aria-hidden>🏦</span>
+          <div className="flex-1">
+            <h2 className="font-display text-lg font-bold">Bank or card statement</h2>
+            <p className="text-sm text-ink-2">
+              Catches subscriptions paid by card or debit order. Download a statement covering at least three months from your
+              bank&apos;s app or website and upload the PDF. Remove any PDF password first.
             </p>
             <p className="mt-1 text-xs text-ink-2">
-              M-Pesa statements are read on our server. Bank statements:{" "}
               {hasClaude()
-                ? "the statement text is sent to Claude, which lists the payments out."
-                : "read with built-in rules (set ANTHROPIC_API_KEY to use Claude for any bank layout)."}
+                ? "Bank layouts vary, so the statement text is sent to Claude, which lists the payments out."
+                : "Read with built-in rules (set ANTHROPIC_API_KEY to use Claude for any bank layout)."}
             </p>
             <div className="mt-4">
-              <StatementUpload demo={user.isDemo} />
+              <StatementUpload demo={user.isDemo} kind="bank" />
             </div>
           </div>
         </div>

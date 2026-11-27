@@ -69,6 +69,7 @@ export async function scanInbox(): Promise<ActionResult> {
 
 export async function uploadStatement(_: ActionResult | null, form: FormData): Promise<ActionResult> {
   const user = await me();
+  const kind = form.get("kind") === "bank" ? "bank" : "mpesa";
   try {
     let bytes: Uint8Array;
     const sample = form.get("sample");
@@ -83,7 +84,7 @@ export async function uploadStatement(_: ActionResult | null, form: FormData): P
       if (!(file instanceof File) || file.size === 0) return { ok: false, message: "Choose a PDF first." };
       bytes = new Uint8Array(await file.arrayBuffer());
     }
-    const res = await ingestStatement(user.id, bytes);
+    const res = await ingestStatement(user.id, bytes, kind);
     await prisma.scan.create({ data: { userId: user.id, kind: res.kind, status: "done", finishedAt: new Date() } });
     refresh();
     const what = res.kind === "mpesa" ? "M-Pesa statement" : "bank statement";

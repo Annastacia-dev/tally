@@ -126,12 +126,18 @@ type StatementCharge = {
 };
 
 /** Read an M-Pesa or bank statement PDF and store charges for recurring payments. */
-export async function ingestStatement(userId: string, pdf: Uint8Array): Promise<StatementResult> {
+export async function ingestStatement(userId: string, pdf: Uint8Array, kind: "mpesa" | "bank"): Promise<StatementResult> {
   const text = await pdfToText(pdf);
 
   // M-Pesa statements have a fixed layout we can parse exactly.
   const mpesa = parseStatementText(text);
-  if (mpesa.length > 0) {
+  if (kind === "mpesa" && mpesa.length === 0) {
+    throw new Error("This does not look like an M-Pesa statement. If it is from a bank or card, upload it under Bank or card statement.");
+  }
+  if (kind === "bank" && mpesa.length > 0) {
+    throw new Error("This is an M-Pesa statement. Upload it under M-Pesa statement instead.");
+  }
+  if (kind === "mpesa") {
     const recurring = findRecurring(mpesa);
     const charges = recurring.flatMap((r) =>
       r.txns.map((t) => ({
@@ -152,7 +158,7 @@ export async function ingestStatement(userId: string, pdf: Uint8Array): Promise<
 
   const { txns, reader } = await readBankStatement(text);
   if (txns.length === 0) {
-    throw new Error("No transactions found. Upload a full M-Pesa statement or a bank statement PDF.");
+    throw new Error("No transactions found. Upload a full bank or card statement PDF covering at least three months.");
   }
   const recurring = findBankRecurring(txns);
   const charges = recurring.flatMap((r) =>

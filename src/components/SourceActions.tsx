@@ -28,34 +28,29 @@ export function ScanButton({ label }: { label: string }) {
   );
 }
 
-export function StatementUpload({ demo }: { demo: boolean }) {
+export function StatementUpload({ demo, kind }: { demo: boolean; kind: "mpesa" | "bank" }) {
   const [state, action, pending] = useActionState<ActionResult | null, FormData>(uploadStatement, null);
   return (
     <div>
       <form action={action} className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <input type="hidden" name="kind" value={kind} />
         <label className="flex flex-1 cursor-pointer items-center gap-3 rounded-2xl border-2 border-dashed border-line px-4 py-3 text-sm text-ink-2 hover:border-accent">
           <span className="text-xl" aria-hidden>📄</span>
           <input type="file" name="statement" accept="application/pdf" className="w-full text-sm file:hidden" />
         </label>
         <button className="btn btn-primary" disabled={pending}>
-          {pending ? "Reading..." : "Upload statement"}
+          {pending ? "Reading..." : kind === "mpesa" ? "Upload M-Pesa statement" : "Upload bank statement"}
         </button>
       </form>
       {demo && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-2 text-sm">
-          <span className="text-ink-2">or try a sample:</span>
-          {[
-            ["mpesa", "M-Pesa statement"],
-            ["bank", "bank statement"],
-          ].map(([value, label]) => (
-            <form key={value} action={action}>
-              <input type="hidden" name="sample" value={value} />
-              <button className="font-semibold text-accent underline-offset-2 hover:underline" disabled={pending}>
-                {label}
-              </button>
-            </form>
-          ))}
-        </div>
+        <form action={action} className="mt-2 flex flex-wrap items-center gap-x-2 text-sm">
+          <input type="hidden" name="kind" value={kind} />
+          <input type="hidden" name="sample" value={kind} />
+          <span className="text-ink-2">or</span>
+          <button className="font-semibold text-accent underline-offset-2 hover:underline" disabled={pending}>
+            try a sample {kind === "mpesa" ? "M-Pesa" : "bank"} statement
+          </button>
+        </form>
       )}
       <Result r={state} />
     </div>
