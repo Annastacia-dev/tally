@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
-import { MpesaUpload, RemindNow, ScanButton } from "@/components/SourceActions";
+import { PushToggle } from "@/components/PushToggle";
+import { StatementUpload, RemindNow, ScanButton } from "@/components/SourceActions";
 import { fmtDate } from "@/lib/dates";
 import { prisma } from "@/lib/db";
-import { hasClaude, MODEL } from "@/lib/extract";
+import { costUsd, EMAIL_MODEL, hasClaude, MODEL } from "@/lib/extract";
+import { pushPublicKey } from "@/lib/push";
 import { resetData, updateSettings } from "../../actions";
 
 export const maxDuration = 300;
@@ -15,12 +17,17 @@ export default async function Sources() {
     prisma.scan.findMany({ where: { userId: user.id }, orderBy: { startedAt: "desc" }, take: 5 }),
     prisma.account.findFirst({ where: { userId: user.id, provider: "google" } }),
   ]);
-  const lastEmail = scans.find((s) => s.kind !== "mpesa");
+  const lastEmail = scans.find((s) => s.kind === "gmail" || s.kind === "fixtures");
+  const lastTokens = lastEmail ? lastEmail.inputTokens + lastEmail.outputTokens : 0;
+  const lastCost = lastEmail ? costUsd(lastEmail, lastEmail.model ?? MODEL) : null;
+  const lastScanCost = lastTokens
+    ? ` · used ${lastTokens.toLocaleString()} tokens${lastCost !== null ? `, about US$${lastCost.toFixed(2)}` : ""}`
+    : "";
 
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="font-display text-3xl font-bold">Sources</h1>
+        <h1 className="page-title">Sources</h1>
         <p className="text-ink-2">Where Tally looks for your subscriptions.</p>
       </div>
 
@@ -37,9 +44,13 @@ export default async function Sources() {
                   : "Sign in with Google to connect your inbox."}
             </p>
             <p className="mt-1 text-xs text-ink-2">
-              Extraction: {hasClaude() ? `Claude (${MODEL})` : "built-in rules (set ANTHROPIC_API_KEY to use Claude)"}
+              Extraction: {hasClaude() ? `Claude (${EMAIL_MODEL})` : "built-in rules (set ANTHROPIC_API_KEY to use Claude)"}
               {lastEmail && ` · last scan ${fmtDate(lastEmail.startedAt, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}, ${lastEmail.status}`}
+              {lastScanCost}
             </p>
+            {lastEmail?.status === "failed" && lastEmail.error && (
+              <p className="mt-1 text-xs font-semibold text-warn">{lastEmail.error.slice(0, 200)}</p>
+            )}
             <div className="mt-4">
               <ScanButton label={lastEmail ? "Scan again" : user.isDemo ? "Scan sample inbox" : "Scan my inbox"} />
             </div>
@@ -53,11 +64,34 @@ export default async function Sources() {
           <div className="flex-1">
             <h2 className="font-display text-lg font-bold">M-Pesa statement</h2>
             <p className="text-sm text-ink-2">
-              Many Kenyan subscriptions have no email receipt. In the M-PESA app go to <b>Statements</b>, request a full statement as PDF, then
-              upload it here. We look for paybills and tills you pay on a regular schedule. Remove the PDF password first.
+              Many subscriptions are paid by paybill or till and have no email receipt. Open the M-PESA app, go to{" "}
+              <b>Statements</b> and request a full statement, then upload the PDF. We look for payments you make on a regular
+              schedule. Remove the PDF password first.
+            </p>
+            <p className="mt-1 text-xs text-ink-2">Read on our server. Nothing is sent to Claude.</p>
+            <div className="mt-4">
+              <StatementUpload demo={user.isDemo} kind="mpesa" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="card p-5 sm:p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-pink/20 text-2xl" aria-hidden>🏦</span>
+          <div className="flex-1">
+            <h2 className="font-display text-lg font-bold">Bank or card statement</h2>
+            <p className="text-sm text-ink-2">
+              Catches subscriptions paid by card or debit order. Download a statement covering at least three months from your
+              bank&apos;s app or website and upload the PDF. Remove any PDF password first.
+            </p>
+            <p className="mt-1 text-xs text-ink-2">
+              {hasClaude()
+                ? "Bank layouts vary, so the statement text is sent to Claude, which lists the payments out."
+                : "Read with built-in rules (set ANTHROPIC_API_KEY to use Claude for any bank layout)."}
             </p>
             <div className="mt-4">
-              <MpesaUpload demo={user.isDemo} />
+              <StatementUpload demo={user.isDemo} kind="bank" />
             </div>
           </div>
         </div>
@@ -68,11 +102,14 @@ export default async function Sources() {
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-sun/25 text-2xl" aria-hidden>⏰</span>
           <div className="flex-1">
             <h2 className="font-display text-lg font-bold">Reminders</h2>
-            <p className="text-sm text-ink-2">We email {user.email} before each renewal. The check runs every morning.</p>
+            <p className="text-sm text-ink-2">
+              We email {user.email} before each renewal, and notify any device you turn notifications on for. The check runs every
+              morning.
+            </p>
             <form action={updateSettings} className="mt-4 flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2 text-sm font-semibold">
                 <input type="checkbox" name="remindersOn" defaultChecked={user.remindersOn} className="h-4 w-4 accent-[var(--accent)]" />
-                Email me
+                Remind me
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input type="number" name="remindDaysBefore" min={0} max={30} defaultValue={user.remindDaysBefore} className="input w-20" />
@@ -82,6 +119,11 @@ export default async function Sources() {
             </form>
             <div className="mt-3">
               <RemindNow />
+            </div>
+            <div className="mt-5 border-t-2 border-dashed border-line pt-4">
+              <h3 className="text-sm font-bold">Notifications on this device</h3>
+              <p className="mb-3 text-xs text-ink-2">A notification arrives with each reminder email. Turn it on on each phone or computer you use.</p>
+              <PushToggle publicKey={pushPublicKey()} />
             </div>
           </div>
         </div>

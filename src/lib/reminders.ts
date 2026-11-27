@@ -2,12 +2,21 @@ import { prisma } from "./db";
 import { daysBetween } from "./cycles";
 import { TZ } from "./dates";
 import { formatMoney } from "./money";
+import { pushToUser } from "./push";
 
-// Daily job: email the user a few days before each renewal, once per renewal date.
+// Daily job: email the user, and notify their devices, a few days before each
+// renewal, once per renewal date.
+
+/** "Tally <noreply@example.com>" or a bare "noreply@example.com". */
+export function parseSender(value: string | undefined) {
+  const v = (value || "reminders@example.com").trim();
+  const m = v.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  return m ? { name: m[1].trim() || "Tally", email: m[2].trim() } : { name: "Tally", email: v };
+}
 
 export async function sendBrevoEmail(to: { email: string; name?: string | null }, subject: string, html: string) {
   const key = process.env.BREVO_API_KEY;
-  const sender = { email: process.env.REMINDER_FROM_EMAIL ?? "reminders@example.com", name: "Tally" };
+  const sender = parseSender(process.env.REMINDER_FROM_EMAIL);
   if (!key) {
     console.log(`[reminders] BREVO_API_KEY not set, would send to ${to.email}: ${subject}`);
     return { dryRun: true };
@@ -33,14 +42,25 @@ export function reminderHtml(name: string, amount: string, date: Date, days: num
 </div>`;
 }
 
-export async function runReminders(now = new Date()) {
-  const appUrl = process.env.APP_URL ?? process.env.AUTH_URL ?? "http://localhost:3000";
+export const appUrl = () => process.env.APP_URL || process.env.AUTH_URL || "http://localhost:3000";
+
+/** Sends one sample reminder to a user, to check that email delivery works. */
+export async function sendTestEmail(user: { email: string; name?: string | null }) {
+  const html = reminderHtml("Netflix (test)", "KES 1,100", new Date(Date.now() + 3 * 86_400_000), 3, appUrl());
+  return sendBrevoEmail(user, "Test reminder from Tally", html);
+}
+
+/**
+ * Emails users about renewals inside their reminder window. Demo accounts are
+ * never emailed. Pass userId to run for one user only.
+ */
+export async function runReminders(now = new Date(), userId?: string) {
   const users = await prisma.user.findMany({
-    where: { remindersOn: true, email: { not: null } },
+    where: { remindersOn: true, isDemo: false, email: { not: null }, ...(userId ? { id: userId } : {}) },
     include: { subscriptions: { where: { status: { not: "dismissed" }, possiblyCancelled: false, nextRenewalAt: { not: null } } } },
   });
 
-  const sent: { user: string; service: string; renewsOn: string; dryRun: boolean }[] = [];
+  const sent: { user: string; service: string; renewsOn: string; dryRun: boolean; pushed: number }[] = [];
   for (const user of users) {
     for (const sub of user.subscriptions) {
       const renew = sub.nextRenewalAt!;
@@ -49,14 +69,21 @@ export async function runReminders(now = new Date()) {
       if (sub.lastRemindedFor && sub.lastRemindedFor.getTime() === renew.getTime()) continue;
 
       const amount = formatMoney(sub.amount, sub.currency);
-      const subject = `${sub.name} renews ${days <= 1 ? (days === 0 ? "today" : "tomorrow") : `in ${days} days`} (${amount})`;
+      const when = days <= 1 ? (days === 0 ? "today" : "tomorrow") : `in ${days} days`;
+      const subject = `${sub.name} renews ${when} (${amount})`;
       const res = await sendBrevoEmail(
         { email: user.email!, name: user.name },
         subject,
-        reminderHtml(sub.name, amount, renew, days, appUrl),
+        reminderHtml(sub.name, amount, renew, days, appUrl()),
       );
+      const pushed = await pushToUser(user.id, {
+        title: `${sub.name} renews ${when}`,
+        body: `${amount} will be charged. Still using it? If not, cancel before then.`,
+        url: "/dashboard",
+        tag: `renewal-${sub.id}`,
+      });
       await prisma.subscription.update({ where: { id: sub.id }, data: { lastRemindedFor: renew } });
-      sent.push({ user: user.email!, service: sub.name, renewsOn: renew.toISOString().slice(0, 10), dryRun: res.dryRun });
+      sent.push({ user: user.email!, service: sub.name, renewsOn: renew.toISOString().slice(0, 10), dryRun: res.dryRun, pushed });
     }
   }
   return sent;

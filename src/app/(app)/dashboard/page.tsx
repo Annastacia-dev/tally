@@ -17,7 +17,7 @@ const CYCLE_LABEL: Record<string, string> = {
   unknown: "",
 };
 
-const SOURCE_LABEL: Record<string, string> = { email: "📧 Email", mpesa: "📱 M-Pesa", manual: "✍️ Manual" };
+const SOURCE_LABEL: Record<string, string> = { email: "📧 Email", mpesa: "📱 M-Pesa", bank: "🏦 Bank", manual: "✍️ Manual" };
 
 function relDays(d: Date, now: Date) {
   const n = daysBetween(now, d);
@@ -51,7 +51,7 @@ export default async function Dashboard() {
       {data.pending > 0 && (
         <Link
           href="/review"
-          className="flex items-center justify-between gap-3 rounded-3xl bg-sun/20 px-5 py-3 text-sm font-semibold ring-1 ring-sun/40 hover:bg-sun/30"
+          className="flex items-center justify-between gap-3 rounded-xl border-2 border-edge bg-sun px-5 py-3 text-sm font-bold text-[#17142b] shadow-[4px_4px_0_var(--edge)] hover:-translate-y-px"
         >
           <span>✨ {data.pending} new subscription{data.pending > 1 ? "s" : ""} to review</span>
           <span aria-hidden>→</span>
@@ -60,11 +60,11 @@ export default async function Dashboard() {
 
       {/* Totals */}
       <section className="grid gap-4 md:grid-cols-3">
-        <div className="relative overflow-hidden rounded-[1.75rem] bg-accent p-6 text-accent-ink md:col-span-2">
+        <div className="relative overflow-hidden rounded-[1.25rem] border-2 border-edge bg-accent p-6 text-accent-ink shadow-[6px_6px_0_var(--edge)] md:col-span-2">
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/15" aria-hidden />
           <div className="absolute -bottom-16 right-20 h-32 w-32 rounded-full bg-white/10" aria-hidden />
           <p className="text-sm font-semibold opacity-85">You spend about</p>
-          <p className="mt-1 font-display text-5xl font-extrabold tracking-tight sm:text-6xl">
+          <p className="mt-1 font-display text-5xl font-extrabold tracking-tight [font-stretch:75%] sm:text-7xl">
             {formatMoney(data.monthly, home)}
             <span className="text-xl font-bold opacity-80"> /month</span>
           </p>
@@ -155,7 +155,7 @@ export default async function Dashboard() {
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {data.active.map((s) => (
-            <article key={s.id} className="card flex flex-col gap-3 p-4 transition hover:-translate-y-0.5 hover:shadow-md">
+            <article key={s.id} className="card flex flex-col gap-3 p-4 transition hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[6px_6px_0_var(--edge)]">
               <div className="flex items-center gap-3">
                 <ServiceLogo name={s.name} color={brandColor(s.key)} domain={s.domain} />
                 <div className="min-w-0 flex-1">

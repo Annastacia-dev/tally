@@ -8,7 +8,7 @@ import { formatMoney } from "@/lib/money";
 import { brandColor } from "@/lib/services";
 import { confirmAll, setStatus } from "../../actions";
 
-const SOURCE_LABEL: Record<string, string> = { email: "📧 Email", mpesa: "📱 M-Pesa", manual: "✍️ Manual" };
+const SOURCE_LABEL: Record<string, string> = { email: "📧 Email", mpesa: "📱 M-Pesa", bank: "🏦 Bank", manual: "✍️ Manual" };
 
 export default async function Review() {
   const user = await requireUser();
@@ -29,7 +29,7 @@ export default async function Review() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-bold">Review</h1>
+          <h1 className="page-title">Review</h1>
           <p className="text-ink-2">Check what Tally found, and add anything it missed.</p>
         </div>
         {groups[0].items.length > 1 && (

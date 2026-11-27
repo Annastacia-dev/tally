@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { scanInbox, sendRemindersNow, uploadMpesa, type ActionResult } from "@/app/actions";
+import { scanInbox, sendRemindersNow, sendTestReminder, uploadStatement, type ActionResult } from "@/app/actions";
 
 function Result({ r }: { r: ActionResult | null }) {
   if (!r) return null;
@@ -28,24 +28,27 @@ export function ScanButton({ label }: { label: string }) {
   );
 }
 
-export function MpesaUpload({ demo }: { demo: boolean }) {
-  const [state, action, pending] = useActionState<ActionResult | null, FormData>(uploadMpesa, null);
+export function StatementUpload({ demo, kind }: { demo: boolean; kind: "mpesa" | "bank" }) {
+  const [state, action, pending] = useActionState<ActionResult | null, FormData>(uploadStatement, null);
   return (
     <div>
       <form action={action} className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <input type="hidden" name="kind" value={kind} />
         <label className="flex flex-1 cursor-pointer items-center gap-3 rounded-2xl border-2 border-dashed border-line px-4 py-3 text-sm text-ink-2 hover:border-accent">
           <span className="text-xl" aria-hidden>📄</span>
           <input type="file" name="statement" accept="application/pdf" className="w-full text-sm file:hidden" />
         </label>
         <button className="btn btn-primary" disabled={pending}>
-          {pending ? "Reading..." : "Upload statement"}
+          {pending ? "Reading..." : kind === "mpesa" ? "Upload M-Pesa statement" : "Upload bank statement"}
         </button>
       </form>
       {demo && (
-        <form action={action} className="mt-2">
-          <input type="hidden" name="sample" value="1" />
-          <button className="text-sm font-semibold text-accent underline-offset-2 hover:underline" disabled={pending}>
-            or use the sample M-Pesa statement
+        <form action={action} className="mt-2 flex flex-wrap items-center gap-x-2 text-sm">
+          <input type="hidden" name="kind" value={kind} />
+          <input type="hidden" name="sample" value={kind} />
+          <span className="text-ink-2">or</span>
+          <button className="font-semibold text-accent underline-offset-2 hover:underline" disabled={pending}>
+            try a sample {kind === "mpesa" ? "M-Pesa" : "bank"} statement
           </button>
         </form>
       )}
@@ -57,11 +60,17 @@ export function MpesaUpload({ demo }: { demo: boolean }) {
 export function RemindNow() {
   const [pending, start] = useTransition();
   const [result, setResult] = useState<ActionResult | null>(null);
+  const run = (fn: () => Promise<ActionResult>) => start(async () => setResult(await fn()));
   return (
     <div>
-      <button className="btn btn-ghost" disabled={pending} onClick={() => start(async () => setResult(await sendRemindersNow()))}>
-        {pending ? "Checking..." : "Run reminders now"}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button className="btn btn-ghost" disabled={pending} onClick={() => run(sendRemindersNow)}>
+          {pending ? "Working..." : "Run reminders now"}
+        </button>
+        <button className="btn btn-ghost" disabled={pending} onClick={() => run(sendTestReminder)}>
+          Send a test email
+        </button>
+      </div>
       <Result r={result} />
     </div>
   );

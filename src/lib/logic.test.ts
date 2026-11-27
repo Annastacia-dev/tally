@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { addCycle, cycleFromGap, inferSubscription } from "./cycles";
 import { extractWithRules } from "./extract";
-import { counterpartyOf, findRecurring, parseStatementText } from "./mpesa";
-import { serviceKey } from "./services";
+import { cleanPayee, findBankRecurring, readBankWithRules } from "./bank";
+import { counterpartyOf, findRecurring, parseStatementText, pdfToText } from "./mpesa";
+import { sampleBankRows, sampleBankStatementPdf } from "@/fixtures/bank-statement";
+import { parseSender } from "./reminders";
+import { cleanServiceName, serviceKey } from "./services";
 import { fixtureEmails } from "@/fixtures/emails";
 
 const NOW = new Date("2026-11-27T09:00:00Z");
@@ -95,5 +98,107 @@ describe("M-Pesa", () => {
     const rec = findRecurring(parseStatementText(text));
     expect(rec).toHaveLength(1);
     expect(rec[0]).toMatchObject({ serviceKey: "showmax", cycle: "monthly" });
+  });
+});
+
+describe("bank statements", () => {
+  const text = `SAMPLE BANK Opening Balance: 10,000.00
+  Txn Date Value Date Narration Debit Credit Balance
+  03/09/2026 03/09/2026 POS PURCHASE NETFLIX.COM 866-579-7172 NL 441234******9012 1,293.40 8,706.60
+  15/09/2026 15/09/2026 SALARY ACME LTD SEP 50,000.00 58,706.60
+  03/10/2026 03/10/2026 POS PURCHASE NETFLIX.COM 866-579-7172 NL 441234******9012 1,301.75 57,404.85
+  10/10/2026 10/10/2026 POS PURCHASE NAIVAS WESTLANDS 441234******9012 5,212.00 52,192.85
+  02/11/2026 02/11/2026 POS PURCHASE NETFLIX.COM 866-579-7172 NL 441234******9012 1,297.20 50,895.65
+  Closing Balance: 50,895.65`;
+
+  it("reads debits from the running balance and skips credits", () => {
+    const txns = readBankWithRules(text);
+    expect(txns.map((t) => t.amount)).toEqual([1293.4, 1301.75, 5212, 1297.2]);
+    expect(txns[0]).toMatchObject({ payee: "Netflix", currency: "KES" });
+    expect(txns[0].at.toISOString().slice(0, 10)).toBe("2026-09-03");
+  });
+
+  it("cleans card narrations into payee names", () => {
+    expect(cleanPayee("CARD PURCHASE SPOTIFY P2F8C1A9E STOCKHOLM 441234******9012")).toBe("Spotify");
+    expect(cleanPayee("STANDING ORDER S/O 00231 IRON PARADISE GYM")).toBe("Iron Paradise Gym");
+  });
+
+  it("finds recurring card payments", () => {
+    const rec = findBankRecurring(readBankWithRules(text));
+    expect(rec).toHaveLength(1);
+    expect(rec[0]).toMatchObject({ serviceKey: "netflix", cycle: "monthly" });
+  });
+
+  it("reads the generated sample bank statement PDF", async () => {
+    const pdf = new Uint8Array(await sampleBankStatementPdf());
+    const text = await pdfToText(pdf);
+    const txns = readBankWithRules(text);
+    expect(txns).toHaveLength(sampleBankRows().filter((r) => r.debit).length);
+    const keys = findBankRecurring(txns).map((r) => r.serviceKey).sort();
+    expect(keys).toEqual(["apple", "iron-paradise-gym", "jubilee-insurance-policy", "netflix", "spotify"].sort());
+    // M-Pesa parser must not claim a bank statement.
+    expect(parseStatementText(text)).toHaveLength(0);
+  });
+});
+
+describe("mixed currencies", () => {
+  it("keeps a monthly cycle when the same payments appear in USD email and KES bank charges", () => {
+    const d = (s: string) => new Date(`${s}T09:00:00Z`);
+    const charges = ["2026-08-01", "2026-09-01", "2026-10-01"].flatMap((day, i) => [
+      { amount: 9.99, currency: "USD", chargedAt: d(day) },
+      { amount: 1290 + i, currency: "KES", chargedAt: d(day.replace(/01$/, "02")) },
+    ]);
+    expect(inferSubscription(charges, d("2026-10-10"))).toMatchObject({ cycle: "monthly", currency: "KES" });
+  });
+
+  it("keeps a monthly cycle when a receipt and its bank charge post days apart", () => {
+    const d = (s: string) => new Date(`${s}T09:00:00Z`);
+    const charges = ["2026-08-01", "2026-09-01", "2026-10-01"].flatMap((day) => [
+      { amount: 1100, currency: "KES", chargedAt: d(day), source: "email" },
+      { amount: 1100, currency: "KES", chargedAt: d(day.replace(/01$/, "05")), source: "bank" },
+    ]);
+    expect(inferSubscription(charges, d("2026-10-10"))).toMatchObject({ cycle: "monthly" });
+  });
+});
+
+describe("reminder sender", () => {
+  it("accepts a display name or a bare address", () => {
+    expect(parseSender("Tally <noreply@webcafe.africa>")).toEqual({ name: "Tally", email: "noreply@webcafe.africa" });
+    expect(parseSender('"Tally Reminders" <a@b.co>')).toEqual({ name: "Tally Reminders", email: "a@b.co" });
+    expect(parseSender("a@b.co")).toEqual({ name: "Tally", email: "a@b.co" });
+    expect(parseSender("")).toEqual({ name: "Tally", email: "reminders@example.com" });
+  });
+});
+
+describe("service name cleanup", () => {
+  it("drops sender words and trailing details", () => {
+    expect(cleanServiceName("Supabase Billing Team")).toBe("Supabase");
+    expect(cleanServiceName("Namecheap Domain Renewal (diversifiedke.org)")).toBe("Namecheap");
+    expect(cleanServiceName("Acme Inc.")).toBe("Acme");
+    expect(cleanServiceName("YouTube Premium")).toBe("YouTube Premium");
+    expect(cleanServiceName("Microsoft Teams")).toBe("Microsoft Teams");
+    expect(cleanServiceName("Billing")).toBe("Billing");
+  });
+});
+
+describe("prefilter", () => {
+  it("spots amounts in common formats", async () => {
+    const { mentionsMoney } = await import("./prefilter");
+    const has = (body: string) => mentionsMoney({ subject: "", body });
+    expect(has("Total: $9.99")).toBe(true);
+    expect(has("You paid KES 1,200.00")).toBe(true);
+    expect(has("Amount 15.00 USD")).toBe(true);
+    expect(has("Ksh499 charged")).toBe(true);
+    expect(has("New sign-in from Chrome on Windows")).toBe(false);
+    expect(has("Your order #12345 has shipped")).toBe(false);
+  });
+
+  it("trims long bodies but keeps the amount", async () => {
+    const { trimBody, MAX_BODY_CHARS } = await import("./prefilter");
+    const long = `${"Thanks for being with us. ".repeat(400)} Total charged: US$23.20 ${"footer ".repeat(300)}`;
+    const out = trimBody(long);
+    expect(out.length).toBeLessThan(MAX_BODY_CHARS + 50);
+    expect(out).toContain("US$23.20");
+    expect(trimBody("See https://example.com/track?x=1 now")).toBe("See now");
   });
 });

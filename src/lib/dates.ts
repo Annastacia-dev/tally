@@ -1,5 +1,5 @@
 // Dates are shown in Kenyan time regardless of where the server runs.
-export const TZ = process.env.APP_TIMEZONE ?? "Africa/Nairobi";
+export const TZ = process.env.APP_TIMEZONE || "Africa/Nairobi";
 
 export function fmtDate(d: Date, opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" }) {
   return d.toLocaleDateString("en-KE", { timeZone: TZ, ...opts });

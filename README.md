@@ -1,6 +1,6 @@
 # Tally
 
-Tally finds every subscription you pay for, from your Gmail receipts and your M-Pesa statement, and emails you before each renewal.
+Tally finds every subscription you pay for, from your Gmail receipts and your M-Pesa or bank statements, and emails you before each renewal.
 
 For each subscription it shows what you pay, whether it is weekly, monthly or yearly, when it next renews, and your yearly total across everything.
 
@@ -8,15 +8,16 @@ For each subscription it shows what you pay, whether it is weekly, monthly or ye
 
 1. **Sign in with Google** with read-only Gmail access (`gmail.readonly`).
 2. **Scan** the last 18 months of mail for receipts, invoices, renewal notices and known subscription senders (`src/lib/services.ts`).
-3. **Extract** the service, amount, currency, plan, charge date, billing cycle and a confidence score from each email with Claude, as structured JSON (`src/lib/extract.ts`).
+3. **Extract** the service, amount, currency, plan, charge date, billing cycle and a confidence score from each email with Claude, as structured JSON (`src/lib/extract.ts`). Emails that name no amount of money are skipped without calling Claude, and long emails are shortened first (`src/lib/prefilter.ts`), which keeps the cost of a scan down.
 4. **Infer the pattern** (`src/lib/cycles.ts`): group charges by service, take the cycle from the gaps between charges, set next renewal to last charge plus one cycle, and mark a service "possibly cancelled" when an expected charge is overdue.
 5. **Review**: confirm, edit or dismiss what was found, and add anything missing by hand.
 6. **M-Pesa statement**: upload the PDF. Tally finds paybills and tills you pay on a regular schedule with similar amounts (`src/lib/mpesa.ts`) and merges them with the email results. The same payment seen in both places is counted once.
-7. **Reminders**: a daily Vercel Cron job (`/api/cron/reminders`) emails you a few days before each renewal, through Brevo.
+7. **Bank statement**: upload the same way. Tally tells the two apart on its own. Bank layouts vary, so with `ANTHROPIC_API_KEY` set Claude lists the payments out (the statement text is sent to the Claude API). Without a key, a rule-based reader works out each debit from the running balance (`src/lib/bank.ts`). Both feed the same recurring detection (`src/lib/recurring.ts`).
+8. **Reminders**: a daily Vercel Cron job (`/api/cron/reminders`) emails you a few days before each renewal, through Brevo, and sends a push notification to each device you turned notifications on for (`src/lib/push.ts`). Tally is an installable app; on iPhone and iPad, notifications need it added to the Home Screen first.
 
 ## Demo mode
 
-You can try everything without any credentials. In demo mode the app reads a built-in inbox (`src/fixtures/emails.ts`) and a generated sample M-Pesa statement (`src/fixtures/mpesa-statement.ts`). Fixture dates are relative to today, so the demo always looks current.
+You can try everything without any credentials. In demo mode the app reads a built-in inbox (`src/fixtures/emails.ts`) and generated sample M-Pesa and bank statements (`src/fixtures/mpesa-statement.ts`, `src/fixtures/bank-statement.ts`). Fixture dates are relative to today, so the demo always looks current.
 
 Demo mode is on when `DEMO_MODE=true`, or automatically when no Google client is configured. Without `ANTHROPIC_API_KEY`, emails go through a small rule-based extractor instead of Claude. Without `BREVO_API_KEY`, reminders are written to the server log instead of sent.
 
@@ -46,7 +47,7 @@ Generate `AUTH_SECRET` with `openssl rand -base64 32`.
 Checks:
 
 ```bash
-pnpm test     # unit tests for cycle inference, M-Pesa parsing and extraction
+pnpm test     # unit tests for cycle inference, M-Pesa and bank statement parsing, and extraction
 pnpm lint
 pnpm e2e      # drives the demo flow in a browser; needs `pnpm dev` running
 ```
@@ -87,12 +88,16 @@ When you sign in, Google warns that the app is unverified. Click **Continue**: t
 | `AUTH_GOOGLE_SECRET` | for Gmail | Google OAuth client secret. |
 | `DEMO_MODE` | no | `true` shows "Try the demo". Defaults to on when Google is not configured; `false` hides it. |
 | `ANTHROPIC_API_KEY` | for Claude | Claude API key. Without it the rule-based extractor is used. |
-| `ANTHROPIC_MODEL` | no | Model override. Default `claude-opus-5-5`. |
+| `ANTHROPIC_MODEL` | no | Model for bank statements. Default `claude-opus-5-5`. |
+| `EMAIL_MODEL` | no | Model that reads billing emails. Default `claude-haiku-5-5`, about 40 times cheaper than Opus; reading a receipt does not need more. |
 | `BREVO_API_KEY` | for reminders | Brevo API key (SMTP & API > API keys). Without it reminders are only logged. |
 | `REMINDER_FROM_EMAIL` | for reminders | Sender address, verified in Brevo. |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | for push | Web Push keys. Generate once with `npx web-push generate-vapid-keys`. |
+| `VAPID_SUBJECT` | for push | Contact for push services, e.g. `mailto:you@example.com`. |
 | `CRON_SECRET` | yes in production | Protects `/api/cron/reminders`. Vercel Cron sends it as a bearer token when it is set in the project. |
 | `APP_URL` | no | Link used in reminder emails. Defaults to `AUTH_URL`. |
 | `SCAN_MONTHS` | no | How far back to scan Gmail. Default 18. |
+| `SCAN_MAX_EMAILS` | no | Most new emails one scan reads. Default 1000. Emails already read are skipped, so the next scan continues further back. |
 | `FX_RATES_JSON` | no | KES per unit of other currencies, e.g. `{"USD":129.5}`. Totals are shown in KES. |
 | `APP_TIMEZONE` | no | Time zone for dates. Default `Africa/Nairobi`. |
 | `NEXT_PUBLIC_LOGOS` | no | `off` shows initials instead of loading logos from Google's favicon service. |
@@ -131,6 +136,6 @@ src/
     mpesa.ts           statement parsing + recurring detection
     pipeline.ts        sources -> charges -> subscriptions
     reminders.ts       daily reminder job + Brevo
-  fixtures/            demo inbox and sample M-Pesa statement
+  fixtures/            demo inbox and sample M-Pesa and bank statements
 prisma/schema.prisma   data model
 ```

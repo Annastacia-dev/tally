@@ -11,6 +11,7 @@ export type ChargeLike = {
   cycleHint?: string | null;
   plan?: string | null;
   confidence?: number;
+  source?: string | null;
 };
 
 export type Inferred = {
@@ -102,8 +103,16 @@ export function inferSubscription(charges: ChargeLike[], now = new Date()): Infe
   // 1. Cycle: the median gap between charges wins; fall back to what the receipt said.
   let cycle: Cycle = "unknown";
   let gapConfidence = 0.5;
-  if (list.length >= 2) {
-    const gaps = list.slice(1).map((c, i) => daysBetween(list[i].chargedAt, c.chargedAt));
+  // Gaps are measured within each source and currency. An email receipt and
+  // the bank charge a few days later are the same payment seen twice, so the
+  // days between them say nothing about the cycle.
+  const series = new Map<string, ChargeLike[]>();
+  for (const c of list) {
+    const k = `${c.source ?? ""}:${c.currency}`;
+    series.set(k, [...(series.get(k) ?? []), c]);
+  }
+  const gaps = [...series.values()].flatMap((cs) => cs.slice(1).map((c, i) => daysBetween(cs[i].chargedAt, c.chargedAt)));
+  if (gaps.length > 0) {
     cycle = cycleFromGap(median(gaps));
     if (cycle !== "unknown") {
       const fit = gaps.filter((g) => cycleFromGap(g) === cycle).length / gaps.length;

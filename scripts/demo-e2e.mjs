@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 // Uses a globally installed Playwright if the project does not have one.
 const { chromium, devices } = createRequire(import.meta.url)("playwright");
 
-const BASE = process.env.BASE_URL ?? "http://localhost:3000";
+const BASE = process.env.BASE_URL || "http://localhost:3000";
 const out = process.argv[2];
 const browser = await chromium.launch();
 
@@ -86,7 +86,7 @@ for (const scheme of ["light", "dark"]) {
 }
 
 // Reminder cron endpoint.
-const cron = await fetch(`${BASE}/api/cron/reminders`, { headers: { authorization: `Bearer ${process.env.CRON_SECRET ?? "dev-cron-secret"}` } });
+const cron = await fetch(`${BASE}/api/cron/reminders`, { headers: { authorization: `Bearer ${process.env.CRON_SECRET || "dev-cron-secret"}` } });
 console.log("cron:", cron.status, JSON.stringify(await cron.json()));
 
 await browser.close();

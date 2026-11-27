@@ -1,10 +1,12 @@
 import { prisma } from "./db";
 import { addCycle, inferSubscription, type Cycle } from "./cycles";
-import { extract, type EmailInput } from "./extract";
+import { extract, hasClaude, type EmailInput } from "./extract";
+import { findBankRecurring, readBankStatement } from "./bank";
 import { findRecurring, parseStatementText, pdfToText } from "./mpesa";
-import { displayName, serviceKey, serviceMeta } from "./services";
+import { mentionsMoney } from "./prefilter";
+import { cleanServiceName, displayName, serviceKey, serviceMeta } from "./services";
 
-// Glue between sources (email, M-Pesa) and the Subscription table.
+// Glue between sources (email, M-Pesa, bank) and the Subscription table.
 
 const MIN_CONFIDENCE = 0.5;
 
@@ -15,28 +17,62 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
     Array.from({ length: Math.min(limit, items.length) }, async () => {
       while (next < items.length) {
         const i = next++;
-        out[i] = await fn(items[i]);
+        try {
+          out[i] = await fn(items[i]);
+        } catch (err) {
+          next = items.length; // stop the other workers picking up new items
+          throw err;
+        }
       }
     }),
   );
   return out;
 }
 
-/** Run extraction over emails and store the subscription charges we find. */
-export async function ingestEmails(userId: string, scanId: string, emails: EmailInput[]) {
-  // Skip emails we have already processed in a previous scan.
-  const seen = new Set(
-    (await prisma.charge.findMany({ where: { userId, source: "email" }, select: { sourceRef: true } })).map((c) => c.sourceRef),
-  );
-  const todo = emails.filter((e) => !seen.has(e.id));
-  await prisma.scan.update({ where: { id: scanId }, data: { found: emails.length } });
+/** Emails already read for this user: stored charges plus everything a scan has read. */
+export async function alreadyRead(userId: string) {
+  const [charges, read] = await Promise.all([
+    prisma.charge.findMany({ where: { userId, source: "email" }, select: { sourceRef: true } }),
+    prisma.readEmail.findMany({ where: { userId }, select: { messageId: true } }),
+  ]);
+  return new Set([...charges.map((c) => c.sourceRef), ...read.map((r) => r.messageId)]);
+}
 
-  let processed = emails.length - todo.length;
+/**
+ * Load each email, run extraction and store the subscription charges we find.
+ * Emails are loaded and extracted a few at a time, so a scan that stops part
+ * way (for example on a Gmail rate limit) keeps what it already found.
+ */
+export async function ingestEmails(userId: string, scanId: string, ids: string[], load: (id: string) => Promise<EmailInput>) {
+  // Skip emails read in earlier scans, before spending quota on them.
+  const seen = await alreadyRead(userId);
+  const todo = ids.filter((id) => !seen.has(id));
+  await prisma.scan.update({ where: { id: scanId }, data: { found: ids.length } });
+
+  let processed = ids.length - todo.length;
   let stored = 0;
-  await mapLimit(todo, 4, async (email) => {
-    const x = await extract(email);
+  let skipped = 0;
+  const tokens = { inputTokens: 0, outputTokens: 0 };
+  try {
+    await mapLimit(todo, 4, async (id) => {
+      const email = await load(id);
+      // No amount of money means no charge to find: do not pay Claude to read it.
+      if (!mentionsMoney(email)) {
+        await prisma.readEmail.createMany({ data: [{ userId, messageId: id }], skipDuplicates: true });
+        skipped++;
+        processed++;
+        return;
+      }
+      const { x, by, usage } = await extract(email);
+      tokens.inputTokens += usage.inputTokens;
+      tokens.outputTokens += usage.outputTokens;
+      // Only count an email as read once Claude has read it (or when Claude is
+      // not set up), so a fallback result is retried by a later scan.
+      if (by === "claude" || !hasClaude()) {
+        await prisma.readEmail.createMany({ data: [{ userId, messageId: id }], skipDuplicates: true });
+      }
     processed++;
-    if (processed % 5 === 0) await prisma.scan.update({ where: { id: scanId }, data: { processed } });
+    if (processed % 5 === 0) await prisma.scan.update({ where: { id: scanId }, data: { processed, ...tokens } });
     if (!x || !x.is_subscription_charge || !x.service_name || x.amount <= 0 || x.confidence < MIN_CONFIDENCE) return;
 
     const chargedAt = new Date(x.charge_date);
@@ -45,8 +81,8 @@ export async function ingestEmails(userId: string, scanId: string, emails: Email
         userId,
         source: "email",
         sourceRef: email.id,
-        serviceName: displayName(x.service_name),
-        serviceKey: serviceKey(x.service_name),
+        serviceName: displayName(cleanServiceName(x.service_name)),
+        serviceKey: serviceKey(cleanServiceName(x.service_name)),
         amount: x.amount,
         currency: x.currency.toUpperCase(),
         plan: x.plan || null,
@@ -57,48 +93,114 @@ export async function ingestEmails(userId: string, scanId: string, emails: Email
       },
     });
     stored++;
-  });
+    });
+  } finally {
+    // Keep whatever was found, even if the scan stopped part way.
+    await prisma.scan.update({ where: { id: scanId }, data: { processed, ...tokens } });
+    if (stored > 0) await rebuildSubscriptions(userId);
+  }
 
-  await prisma.scan.update({ where: { id: scanId }, data: { processed, status: "done", finishedAt: new Date() } });
-  await rebuildSubscriptions(userId);
-  return { emails: emails.length, newCharges: stored };
+  await prisma.scan.update({ where: { id: scanId }, data: { status: "done", finishedAt: new Date() } });
+  if (stored === 0) await rebuildSubscriptions(userId);
+  return { emails: ids.length, newCharges: stored, skipped, ...tokens };
 }
 
-/** Parse an M-Pesa statement PDF and store charges for recurring payments. */
-export async function ingestMpesa(userId: string, pdf: Uint8Array) {
+export type StatementResult = {
+  kind: "mpesa" | "bank";
+  reader: "mpesa" | "claude" | "rules";
+  transactions: number;
+  recurring: number;
+  newCharges: number;
+};
+
+type StatementCharge = {
+  ref: string;
+  serviceName: string;
+  serviceKey: string;
+  amount: number;
+  currency: string;
+  at: Date;
+  cycle: string;
+  confidence: number;
+  snippet: string;
+};
+
+/** Read an M-Pesa or bank statement PDF and store charges for recurring payments. */
+export async function ingestStatement(userId: string, pdf: Uint8Array, kind: "mpesa" | "bank"): Promise<StatementResult> {
   const text = await pdfToText(pdf);
-  const txns = parseStatementText(text);
+
+  // M-Pesa statements have a fixed layout we can parse exactly.
+  const mpesa = parseStatementText(text);
+  if (kind === "mpesa" && mpesa.length === 0) {
+    throw new Error("This does not look like an M-Pesa statement. If it is from a bank or card, upload it under Bank or card statement.");
+  }
+  if (kind === "bank" && mpesa.length > 0) {
+    throw new Error("This is an M-Pesa statement. Upload it under M-Pesa statement instead.");
+  }
+  if (kind === "mpesa") {
+    const recurring = findRecurring(mpesa);
+    const charges = recurring.flatMap((r) =>
+      r.txns.map((t) => ({
+        ref: t.receipt,
+        serviceName: r.serviceName,
+        serviceKey: r.serviceKey,
+        amount: t.withdrawn,
+        currency: "KES",
+        at: t.at,
+        cycle: r.cycle,
+        confidence: r.confidence,
+        snippet: t.details,
+      })),
+    );
+    const newCharges = await storeCharges(userId, "mpesa", charges);
+    return { kind: "mpesa", reader: "mpesa", transactions: mpesa.length, recurring: recurring.length, newCharges };
+  }
+
+  const { txns, reader } = await readBankStatement(text);
   if (txns.length === 0) {
-    throw new Error("No M-Pesa transactions found. Is this a Safaricom full statement PDF (not password protected)?");
+    throw new Error("No transactions found. Upload a full bank or card statement PDF covering at least three months.");
   }
-  const recurring = findRecurring(txns);
-  const seen = new Set(
-    (await prisma.charge.findMany({ where: { userId, source: "mpesa" }, select: { sourceRef: true } })).map((c) => c.sourceRef),
+  const recurring = findBankRecurring(txns);
+  const charges = recurring.flatMap((r) =>
+    r.txns.map((t) => ({
+      ref: t.ref,
+      serviceName: r.serviceName,
+      serviceKey: r.serviceKey,
+      amount: t.amount,
+      currency: t.currency,
+      at: t.at,
+      cycle: r.cycle,
+      confidence: r.confidence,
+      snippet: t.description,
+    })),
   );
-  let created = 0;
-  for (const r of recurring) {
-    for (const t of r.txns) {
-      if (seen.has(t.receipt)) continue;
-      await prisma.charge.create({
-        data: {
-          userId,
-          source: "mpesa",
-          sourceRef: t.receipt,
-          serviceName: r.serviceName,
-          serviceKey: r.serviceKey,
-          amount: t.withdrawn,
-          currency: "KES",
-          chargedAt: t.at,
-          cycleHint: r.cycle,
-          confidence: r.confidence,
-          snippet: t.details,
-        },
-      });
-      created++;
-    }
-  }
+  const newCharges = await storeCharges(userId, "bank", charges);
+  return { kind: "bank", reader, transactions: txns.length, recurring: recurring.length, newCharges };
+}
+
+async function storeCharges(userId: string, source: "mpesa" | "bank", charges: StatementCharge[]) {
+  const seen = new Set(
+    (await prisma.charge.findMany({ where: { userId, source }, select: { sourceRef: true } })).map((c) => c.sourceRef),
+  );
+  const fresh = charges.filter((c) => !seen.has(c.ref) && seen.add(c.ref));
+  // One round trip instead of one per row: statements can hold dozens of charges.
+  await prisma.charge.createMany({
+    data: fresh.map((c) => ({
+      userId,
+      source,
+      sourceRef: c.ref,
+      serviceName: c.serviceName,
+      serviceKey: c.serviceKey,
+      amount: c.amount,
+      currency: c.currency,
+      chargedAt: c.at,
+      cycleHint: c.cycle,
+      confidence: c.confidence,
+      snippet: c.snippet,
+    })),
+  });
   await rebuildSubscriptions(userId);
-  return { transactions: txns.length, recurring: recurring.length, newCharges: created };
+  return fresh.length;
 }
 
 /** Re-derive every subscription from its charges. Keeps user edits and decisions. */
