@@ -8,6 +8,11 @@ export function ServiceLogo({ name, color, domain, size = 44 }: { name: string; 
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const showImg = domain && !failed && process.env.NEXT_PUBLIC_LOGOS !== "off";
+  // Google returns a 16px globe for unknown domains; treat that as a miss.
+  const check = (img: HTMLImageElement) => {
+    if (img.naturalWidth < 32) setFailed(true);
+    else setLoaded(true);
+  };
   return (
     <span
       className="relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-2xl font-display font-bold text-white shadow-sm"
@@ -21,12 +26,13 @@ export function ServiceLogo({ name, color, domain, size = 44 }: { name: string; 
           src={`https://www.google.com/s2/favicons?domain=${domain}&sz=128`}
           alt=""
           className={`absolute inset-0 h-full w-full bg-white object-contain p-1.5 transition-opacity ${loaded ? "opacity-100" : "opacity-0"}`}
-          onError={() => setFailed(true)}
-          onLoad={(e) => {
-            // Google returns a 16px globe for unknown domains; treat that as a miss.
-            if ((e.target as HTMLImageElement).naturalWidth < 32) setFailed(true);
-            else setLoaded(true);
+          // A server-rendered image can finish loading before React hydrates, and
+          // then onLoad never fires. The ref catches images that are already complete.
+          ref={(img) => {
+            if (img?.complete && !loaded) check(img);
           }}
+          onError={() => setFailed(true)}
+          onLoad={(e) => check(e.currentTarget)}
         />
       )}
     </span>
