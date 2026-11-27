@@ -87,39 +87,76 @@ export function PushToggle({ publicKey }: { publicKey: string | null }) {
 
   const test = () => start(async () => setResult(await sendTestPush()));
 
+  const status = {
+    checking: "Checking this browser...",
+    on: "On for this device",
+    off: "Off on this device",
+    blocked: "Blocked. Allow notifications for this site in your browser settings, then reload.",
+    "needs-install": "On iPhone or iPad, add Tally to your Home Screen first, then open it from there.",
+    unsupported: "This browser can't show notifications from Tally.",
+  }[state];
+
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {state === "on" ? (
+    <ChannelRow
+      icon="🔔"
+      title="Notifications"
+      detail={status}
+      on={state === "on"}
+      result={result}
+      actions={
+        state === "on" ? (
           <>
-            <span className="chip bg-lime text-[#17142b]">🔔 On for this device</span>
-            <button className="btn btn-ghost" disabled={pending} onClick={test}>
-              Send a test notification
+            <button className={quietButton} disabled={pending} onClick={test}>
+              Test
             </button>
-            <button className="btn btn-ghost" disabled={pending} onClick={turnOff}>
+            <button className={quietButton} disabled={pending} onClick={turnOff}>
               Turn off
             </button>
           </>
         ) : state === "off" ? (
-          <button className="btn btn-primary" disabled={pending} onClick={turnOn}>
-            {pending ? "Asking your browser..." : "🔔 Turn on notifications"}
+          <button className="btn btn-primary px-3 py-1 text-xs" disabled={pending} onClick={turnOn}>
+            {pending ? "Asking..." : "Turn on"}
           </button>
-        ) : (
-          <p className="text-sm text-ink-2">
-            {state === "checking" && "Checking this browser..."}
-            {state === "blocked" &&
-              "Notifications are blocked for this site. Allow them in your browser's site settings, then reload."}
-            {state === "needs-install" &&
-              "On iPhone and iPad, add Tally to your Home Screen first (Share, then Add to Home Screen), then open it from there."}
-            {state === "unsupported" && "This browser cannot show notifications from Tally. Try Chrome, Edge, Firefox or Safari."}
+        ) : null
+      }
+    />
+  );
+}
+
+export const quietButton = "rounded-lg px-2.5 py-1 text-xs font-bold text-ink-2 hover:bg-surface-2 hover:text-ink disabled:opacity-50";
+
+/** One way of reaching the user (email, this device): what it is, its state, and its buttons. */
+export function ChannelRow({
+  icon,
+  title,
+  detail,
+  on,
+  actions,
+  result,
+}: {
+  icon: string;
+  title: string;
+  detail: string;
+  on: boolean;
+  actions: React.ReactNode;
+  result: ActionResult | null;
+}) {
+  return (
+    <li className="px-4 py-3">
+      <div className="flex items-center gap-3">
+        <span className="text-xl" aria-hidden>
+          {icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-2 text-sm font-bold">
+            {title}
+            <span className={`h-2 w-2 rounded-full ${on ? "bg-mint" : "bg-line"}`} aria-hidden />
           </p>
-        )}
+          <p className="truncate text-xs text-ink-2">{detail}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">{actions}</div>
       </div>
-      {result && (
-        <p className={`rounded-xl border-2 border-edge px-3 py-2 text-sm ${result.ok ? "bg-mint/20" : "bg-warn/15"}`}>
-          {result.message}
-        </p>
-      )}
-    </div>
+      {result && <p className={`mt-2 text-xs font-semibold ${result.ok ? "text-ink" : "text-warn"}`}>{result.message}</p>}
+    </li>
   );
 }

@@ -1,6 +1,5 @@
 import Link from "next/link";
-import Image from "next/image";
-import { withBase } from "@/lib/base-path";
+import { Wordmark } from "@/components/Wordmark";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
 import { DesktopNav, MobileNav } from "@/components/Nav";
@@ -16,9 +15,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="min-h-dvh pb-28 md:pb-12">
       <header className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
-        <Link href="/dashboard" className="font-display text-2xl font-extrabold tracking-tight">
-          <Image src={withBase("/logo.svg")} alt="" unoptimized width={28} height={28} className="mr-1.5 inline-block h-7 w-7 align-[-0.3em]" />
-          tally<span className="text-accent">.</span>
+        <Link href="/dashboard" aria-label="Tally home">
+          <Wordmark />
         </Link>
         <DesktopNav pending={pending} />
         <div className="flex items-center gap-2">

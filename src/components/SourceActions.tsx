@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { scanInbox, sendRemindersNow, sendTestReminder, uploadStatement, type ActionResult } from "@/app/actions";
+import { scanInbox, uploadStatement, type ActionResult } from "@/app/actions";
 
 function Result({ r }: { r: ActionResult | null }) {
   if (!r) return null;
@@ -53,25 +53,6 @@ export function StatementUpload({ demo, kind }: { demo: boolean; kind: "mpesa" |
         </form>
       )}
       <Result r={state} />
-    </div>
-  );
-}
-
-export function RemindNow() {
-  const [pending, start] = useTransition();
-  const [result, setResult] = useState<ActionResult | null>(null);
-  const run = (fn: () => Promise<ActionResult>) => start(async () => setResult(await fn()));
-  return (
-    <div>
-      <div className="flex flex-wrap gap-2">
-        <button className="btn btn-ghost" disabled={pending} onClick={() => run(sendRemindersNow)}>
-          {pending ? "Working..." : "Run reminders now"}
-        </button>
-        <button className="btn btn-ghost" disabled={pending} onClick={() => run(sendTestReminder)}>
-          Send a test email
-        </button>
-      </div>
-      <Result r={result} />
     </div>
   );
 }

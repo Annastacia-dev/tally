@@ -61,11 +61,11 @@ export function SubscriptionForm({ initial, mode, onDone }: { initial: Values; m
   );
 }
 
-export function EditToggle({ initial }: { initial: Values }) {
+export function EditToggle({ initial, className }: { initial: Values; className?: string }) {
   const [open, setOpen] = useState(false);
   if (!open)
     return (
-      <button className="btn btn-ghost px-3 py-1.5 text-xs" onClick={() => setOpen(true)}>
+      <button className={className ?? "btn btn-ghost px-3 py-1.5 text-xs"} onClick={() => setOpen(true)}>
         Edit
       </button>
     );

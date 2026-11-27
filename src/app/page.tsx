@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
-import Image from "next/image";
-import { withBase } from "@/lib/base-path";
+import { Wordmark } from "@/components/Wordmark";
 import { auth } from "@/auth";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -129,10 +128,7 @@ export default async function Landing() {
   return (
     <main className="overflow-hidden bg-paper">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-        <span className="font-display text-3xl font-extrabold tracking-tight">
-          <Image src={withBase("/logo.svg")} alt="" unoptimized width={36} height={36} className="mr-2 inline-block h-9 w-9 align-[-0.3em]" />
-          tally<span className="text-accent">.</span>
-        </span>
+        <Wordmark size="lg" />
         <nav className="flex items-center gap-2 text-sm font-bold">
           <a href="#how" className="hidden rounded-full px-3 py-2 hover:bg-surface-2 sm:inline">
             How it works
@@ -339,10 +335,7 @@ export default async function Landing() {
       </section>
 
       <footer className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 border-t-2 border-edge px-6 py-8 text-sm font-medium text-ink-2 sm:flex-row">
-        <span className="font-display text-xl font-extrabold text-ink">
-          <Image src={withBase("/logo.svg")} alt="" unoptimized width={28} height={28} className="mr-1.5 inline-block h-7 w-7 align-[-0.3em]" />
-          tally<span className="text-accent">.</span>
-        </span>
+        <Wordmark size="sm" />
         <span>Made in Nairobi. Logos belong to their owners.</span>
       </footer>
     </main>
