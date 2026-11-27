@@ -8,7 +8,7 @@ import { addCycle, type Cycle } from "@/lib/cycles";
 import { prisma } from "@/lib/db";
 import { fetchEmail, listBillingMessageIds } from "@/lib/gmail";
 import { alreadyRead, ingestEmails, ingestStatement } from "@/lib/pipeline";
-import { runReminders } from "@/lib/reminders";
+import { runReminders, sendTestEmail } from "@/lib/reminders";
 import { displayName, serviceKey, serviceMeta } from "@/lib/services";
 
 export type ActionResult = { ok: boolean; message: string };
@@ -165,9 +165,24 @@ export async function updateSettings(form: FormData) {
   refresh();
 }
 
+export async function sendTestReminder(): Promise<ActionResult> {
+  const user = await me();
+  if (user.isDemo || !user.email) return { ok: false, message: "Sign in with Google to send a test email." };
+  try {
+    const res = await sendTestEmail({ email: user.email, name: user.name });
+    return {
+      ok: true,
+      message: res.dryRun ? "No BREVO_API_KEY set, so the test email was only logged." : `Test email sent to ${user.email}.`,
+    };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function sendRemindersNow(): Promise<ActionResult> {
-  await me();
-  const sent = await runReminders();
+  const user = await me();
+  if (user.isDemo) return { ok: false, message: "Demo accounts never get emails. Sign in with Google to try reminders." };
+  const sent = await runReminders(new Date(), user.id);
   return {
     ok: true,
     message: sent.length

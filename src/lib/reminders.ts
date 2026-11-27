@@ -40,10 +40,21 @@ export function reminderHtml(name: string, amount: string, date: Date, days: num
 </div>`;
 }
 
-export async function runReminders(now = new Date()) {
-  const appUrl = process.env.APP_URL || process.env.AUTH_URL || "http://localhost:3000";
+const appUrl = () => process.env.APP_URL || process.env.AUTH_URL || "http://localhost:3000";
+
+/** Sends one sample reminder to a user, to check that email delivery works. */
+export async function sendTestEmail(user: { email: string; name?: string | null }) {
+  const html = reminderHtml("Netflix (test)", "KES 1,100", new Date(Date.now() + 3 * 86_400_000), 3, appUrl());
+  return sendBrevoEmail(user, "Test reminder from Tally", html);
+}
+
+/**
+ * Emails users about renewals inside their reminder window. Demo accounts are
+ * never emailed. Pass userId to run for one user only.
+ */
+export async function runReminders(now = new Date(), userId?: string) {
   const users = await prisma.user.findMany({
-    where: { remindersOn: true, email: { not: null } },
+    where: { remindersOn: true, isDemo: false, email: { not: null }, ...(userId ? { id: userId } : {}) },
     include: { subscriptions: { where: { status: { not: "dismissed" }, possiblyCancelled: false, nextRenewalAt: { not: null } } } },
   });
 
@@ -60,7 +71,7 @@ export async function runReminders(now = new Date()) {
       const res = await sendBrevoEmail(
         { email: user.email!, name: user.name },
         subject,
-        reminderHtml(sub.name, amount, renew, days, appUrl),
+        reminderHtml(sub.name, amount, renew, days, appUrl()),
       );
       await prisma.subscription.update({ where: { id: sub.id }, data: { lastRemindedFor: renew } });
       sent.push({ user: user.email!, service: sub.name, renewsOn: renew.toISOString().slice(0, 10), dryRun: res.dryRun });
