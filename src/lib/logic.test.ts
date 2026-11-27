@@ -180,3 +180,25 @@ describe("service name cleanup", () => {
     expect(cleanServiceName("Billing")).toBe("Billing");
   });
 });
+
+describe("prefilter", () => {
+  it("spots amounts in common formats", async () => {
+    const { mentionsMoney } = await import("./prefilter");
+    const has = (body: string) => mentionsMoney({ subject: "", body });
+    expect(has("Total: $9.99")).toBe(true);
+    expect(has("You paid KES 1,200.00")).toBe(true);
+    expect(has("Amount 15.00 USD")).toBe(true);
+    expect(has("Ksh499 charged")).toBe(true);
+    expect(has("New sign-in from Chrome on Windows")).toBe(false);
+    expect(has("Your order #12345 has shipped")).toBe(false);
+  });
+
+  it("trims long bodies but keeps the amount", async () => {
+    const { trimBody, MAX_BODY_CHARS } = await import("./prefilter");
+    const long = `${"Thanks for being with us. ".repeat(400)} Total charged: US$23.20 ${"footer ".repeat(300)}`;
+    const out = trimBody(long);
+    expect(out.length).toBeLessThan(MAX_BODY_CHARS + 50);
+    expect(out).toContain("US$23.20");
+    expect(trimBody("See https://example.com/track?x=1 now")).toBe("See now");
+  });
+});

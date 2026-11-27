@@ -3,6 +3,7 @@ import { addCycle, inferSubscription, type Cycle } from "./cycles";
 import { extract, hasClaude, type EmailInput } from "./extract";
 import { findBankRecurring, readBankStatement } from "./bank";
 import { findRecurring, parseStatementText, pdfToText } from "./mpesa";
+import { mentionsMoney } from "./prefilter";
 import { cleanServiceName, displayName, serviceKey, serviceMeta } from "./services";
 
 // Glue between sources (email, M-Pesa, bank) and the Subscription table.
@@ -50,10 +51,18 @@ export async function ingestEmails(userId: string, scanId: string, ids: string[]
 
   let processed = ids.length - todo.length;
   let stored = 0;
+  let skipped = 0;
   const tokens = { inputTokens: 0, outputTokens: 0 };
   try {
     await mapLimit(todo, 4, async (id) => {
       const email = await load(id);
+      // No amount of money means no charge to find: do not pay Claude to read it.
+      if (!mentionsMoney(email)) {
+        await prisma.readEmail.createMany({ data: [{ userId, messageId: id }], skipDuplicates: true });
+        skipped++;
+        processed++;
+        return;
+      }
       const { x, by, usage } = await extract(email);
       tokens.inputTokens += usage.inputTokens;
       tokens.outputTokens += usage.outputTokens;
@@ -93,7 +102,7 @@ export async function ingestEmails(userId: string, scanId: string, ids: string[]
 
   await prisma.scan.update({ where: { id: scanId }, data: { status: "done", finishedAt: new Date() } });
   if (stored === 0) await rebuildSubscriptions(userId);
-  return { emails: ids.length, newCharges: stored, ...tokens };
+  return { emails: ids.length, newCharges: stored, skipped, ...tokens };
 }
 
 export type StatementResult = {

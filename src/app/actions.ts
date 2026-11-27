@@ -57,7 +57,7 @@ export async function scanInbox(): Promise<ActionResult> {
     const tokens = res.inputTokens + res.outputTokens;
     const cost = costUsd(res);
     const spent = tokens ? ` Claude used ${tokens.toLocaleString()} tokens${cost !== null ? ` (about US$${cost.toFixed(2)})` : ""}.` : "";
-    return { ok: true, message: `Read ${res.emails} emails and found ${res.newCharges} new charges.${spent}` };
+    return { ok: true, message: `Read ${res.emails} emails and found ${res.newCharges} new charges.${res.skipped ? ` Skipped ${res.skipped} with no amount in them.` : ""}${spent}` };
   } catch (err) {
     refresh();
     const message = err instanceof Error ? err.message : String(err);

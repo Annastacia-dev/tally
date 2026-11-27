@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
+import { trimBody } from "./prefilter";
 
 // What we pull out of a single billing email.
 export const ExtractionSchema = z.object({
@@ -73,7 +74,7 @@ export async function extractWithClaude(email: EmailInput): Promise<{ x: Extract
     messages: [
       {
         role: "user",
-        content: `From: ${email.from}\nSubject: ${email.subject}\nSent: ${email.date}\n\n${email.body.slice(0, 12000)}`,
+        content: `From: ${email.from}\nSubject: ${email.subject}\nSent: ${email.date}\n\n${trimBody(email.body)}`,
       },
     ],
   });
