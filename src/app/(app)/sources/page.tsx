@@ -4,7 +4,7 @@ import { PushToggle } from "@/components/PushToggle";
 import { StatementUpload, RemindNow, ScanButton } from "@/components/SourceActions";
 import { fmtDate } from "@/lib/dates";
 import { prisma } from "@/lib/db";
-import { costUsd, hasClaude, MODEL } from "@/lib/extract";
+import { costUsd, EMAIL_MODEL, hasClaude, MODEL } from "@/lib/extract";
 import { pushPublicKey } from "@/lib/push";
 import { resetData, updateSettings } from "../../actions";
 
@@ -19,7 +19,7 @@ export default async function Sources() {
   ]);
   const lastEmail = scans.find((s) => s.kind === "gmail" || s.kind === "fixtures");
   const lastTokens = lastEmail ? lastEmail.inputTokens + lastEmail.outputTokens : 0;
-  const lastCost = lastEmail ? costUsd(lastEmail) : null;
+  const lastCost = lastEmail ? costUsd(lastEmail, lastEmail.model ?? MODEL) : null;
   const lastScanCost = lastTokens
     ? ` · used ${lastTokens.toLocaleString()} tokens${lastCost !== null ? `, about US$${lastCost.toFixed(2)}` : ""}`
     : "";
@@ -44,7 +44,7 @@ export default async function Sources() {
                   : "Sign in with Google to connect your inbox."}
             </p>
             <p className="mt-1 text-xs text-ink-2">
-              Extraction: {hasClaude() ? `Claude (${MODEL})` : "built-in rules (set ANTHROPIC_API_KEY to use Claude)"}
+              Extraction: {hasClaude() ? `Claude (${EMAIL_MODEL})` : "built-in rules (set ANTHROPIC_API_KEY to use Claude)"}
               {lastEmail && ` · last scan ${fmtDate(lastEmail.startedAt, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}, ${lastEmail.status}`}
               {lastScanCost}
             </p>

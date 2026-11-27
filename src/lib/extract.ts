@@ -31,7 +31,14 @@ export type EmailInput = {
   body: string;
 };
 
+/** Model for harder reading, such as bank statements. */
 export const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
+/**
+ * Model for reading billing emails. Pulling a name, amount and date out of a
+ * receipt is simple, and a scan reads hundreds of emails, so a small model
+ * keeps the cost down (Haiku 5.5 is about 40 times cheaper than Opus 5.5).
+ */
+export const EMAIL_MODEL = process.env.EMAIL_MODEL || "claude-haiku-5-5";
 
 const SYSTEM = `You read one email at a time from a person's inbox and extract subscription billing details.
 Only mark is_subscription_charge true for recurring services (streaming, music, apps, cloud storage, SaaS, gyms, internet, TV).
@@ -64,11 +71,14 @@ function unavailable(err: unknown): string | null {
 }
 
 export async function extractWithClaude(email: EmailInput): Promise<{ x: Extraction | null; usage: Usage }> {
+  // Haiku 5.5 has no server-side fallback and rejects the option.
+  const fallback = EMAIL_MODEL.startsWith("claude-haiku")
+    ? {}
+    : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const };
   const response = await anthropic().beta.messages.parse({
-    model: MODEL,
+    model: EMAIL_MODEL,
     max_tokens: 4000,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
+    ...fallback,
     output_config: { effort: "low", format: betaZodOutputFormat(ExtractionSchema) },
     system: SYSTEM,
     messages: [

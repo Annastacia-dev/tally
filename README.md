@@ -88,7 +88,8 @@ When you sign in, Google warns that the app is unverified. Click **Continue**: t
 | `AUTH_GOOGLE_SECRET` | for Gmail | Google OAuth client secret. |
 | `DEMO_MODE` | no | `true` shows "Try the demo". Defaults to on when Google is not configured; `false` hides it. |
 | `ANTHROPIC_API_KEY` | for Claude | Claude API key. Without it the rule-based extractor is used. |
-| `ANTHROPIC_MODEL` | no | Model override. Default `claude-opus-5-5`. |
+| `ANTHROPIC_MODEL` | no | Model for bank statements. Default `claude-opus-5-5`. |
+| `EMAIL_MODEL` | no | Model that reads billing emails. Default `claude-haiku-5-5`, about 40 times cheaper than Opus; reading a receipt does not need more. |
 | `BREVO_API_KEY` | for reminders | Brevo API key (SMTP & API > API keys). Without it reminders are only logged. |
 | `REMINDER_FROM_EMAIL` | for reminders | Sender address, verified in Brevo. |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | for push | Web Push keys. Generate once with `npx web-push generate-vapid-keys`. |

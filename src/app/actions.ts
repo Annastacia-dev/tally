@@ -6,7 +6,7 @@ import { requireUser, signIn, signOut } from "@/auth";
 import { fixtureEmails } from "@/fixtures/emails";
 import { addCycle, type Cycle } from "@/lib/cycles";
 import { prisma } from "@/lib/db";
-import { costUsd } from "@/lib/extract";
+import { costUsd, EMAIL_MODEL } from "@/lib/extract";
 import { fetchEmail, listBillingMessageIds } from "@/lib/gmail";
 import { alreadyRead, ingestEmails, ingestStatement } from "@/lib/pipeline";
 import { isDeviceInput, pushToUser, removeDevice, saveDevice } from "@/lib/push";
@@ -42,7 +42,7 @@ export async function signOutAction() {
 export async function scanInbox(): Promise<ActionResult> {
   const user = await me();
   const useFixtures = user.isDemo;
-  const scan = await prisma.scan.create({ data: { userId: user.id, kind: useFixtures ? "fixtures" : "gmail" } });
+  const scan = await prisma.scan.create({ data: { userId: user.id, kind: useFixtures ? "fixtures" : "gmail", model: EMAIL_MODEL } });
   try {
     let res;
     if (useFixtures) {
@@ -56,7 +56,7 @@ export async function scanInbox(): Promise<ActionResult> {
     }
     refresh();
     const tokens = res.inputTokens + res.outputTokens;
-    const cost = costUsd(res);
+    const cost = costUsd(res, EMAIL_MODEL);
     const spent = tokens ? ` Claude used ${tokens.toLocaleString()} tokens${cost !== null ? ` (about US$${cost.toFixed(2)})` : ""}.` : "";
     return { ok: true, message: `Read ${res.emails} emails and found ${res.newCharges} new charges.${res.skipped ? ` Skipped ${res.skipped} with no amount in them.` : ""}${spent}` };
   } catch (err) {
