@@ -1,0 +1,132 @@
+// Kumbuka data model.
+// Auth.js tables (User, Account, Session, VerificationToken) plus the app's own
+// Charge, Subscription and Scan tables.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id               String         @id @default(cuid())
+  name             String?
+  email            String?        @unique
+  emailVerified    DateTime?
+  image            String?
+  isDemo           Boolean        @default(false)
+  homeCurrency     String         @default("KES")
+  remindDaysBefore Int            @default(3)
+  remindersOn      Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  accounts         Account[]
+  sessions         Session[]
+  charges          Charge[]
+  subscriptions    Subscription[]
+  scans            Scan[]
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+// One payment we found in a source (an email receipt, an M-Pesa line, or a manual entry).
+model Charge {
+  id             String        @id @default(cuid())
+  userId         String
+  source         String // "email" | "mpesa" | "manual"
+  sourceRef      String // Gmail message id, M-Pesa receipt number, etc.
+  serviceName    String
+  serviceKey     String // normalised name used for grouping
+  amount         Float
+  currency       String
+  plan           String?
+  chargedAt      DateTime
+  cycleHint      String? // what the source itself claimed: monthly, yearly...
+  confidence     Float         @default(1)
+  snippet        String?       @db.Text
+  createdAt      DateTime      @default(now())
+  subscriptionId String?
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, source, sourceRef])
+  @@index([userId, serviceKey])
+}
+
+model Subscription {
+  id                String    @id @default(cuid())
+  userId            String
+  key               String
+  name              String
+  amount            Float
+  currency          String
+  cycle             String // weekly | monthly | quarterly | yearly | unknown
+  plan              String?
+  category          String?
+  domain            String? // used for the logo
+  lastChargedAt     DateTime?
+  nextRenewalAt     DateTime?
+  status            String    @default("detected") // detected | confirmed | dismissed
+  possiblyCancelled Boolean   @default(false)
+  manual            Boolean   @default(false)
+  edited            Boolean   @default(false) // user changed amount/cycle, so rescans keep their values
+  sources           String[]
+  confidence        Float     @default(1)
+  lastRemindedFor   DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  charges           Charge[]
+
+  @@unique([userId, key])
+}
+
+model Scan {
+  id         String    @id @default(cuid())
+  userId     String
+  kind       String // "gmail" | "fixtures" | "mpesa"
+  status     String    @default("running") // running | done | failed
+  found      Int       @default(0)
+  processed  Int       @default(0)
+  error      String?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
