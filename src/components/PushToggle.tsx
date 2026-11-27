@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { withBase } from "@/lib/base-path";
 import { removePushDevice, savePushDevice, sendTestPush, type ActionResult } from "@/app/actions";
 
 type State = "checking" | "unsupported" | "needs-install" | "blocked" | "off" | "on";
@@ -13,7 +14,7 @@ function keyBytes(base64url: string) {
 
 /** The registered service worker, or null if there is none within a few seconds. */
 async function registration() {
-  const reg = await navigator.serviceWorker.getRegistration("/");
+  const reg = await navigator.serviceWorker.getRegistration(withBase("/"));
   if (reg) return reg;
   return Promise.race([
     navigator.serviceWorker.ready,

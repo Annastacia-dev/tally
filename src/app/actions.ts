@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireUser, signIn, signOut } from "@/auth";
 import { fixtureEmails } from "@/fixtures/emails";
 import { addCycle, type Cycle } from "@/lib/cycles";
+import { withBase } from "@/lib/base-path";
 import { prisma } from "@/lib/db";
 import { costUsd, EMAIL_MODEL } from "@/lib/extract";
 import { fetchEmail, listBillingMessageIds } from "@/lib/gmail";
@@ -28,15 +29,15 @@ function refresh() {
 }
 
 export async function signInGoogle() {
-  await signIn("google", { redirectTo: "/sources" });
+  await signIn("google", { redirectTo: withBase("/sources") });
 }
 
 export async function signInDemo() {
-  await signIn("demo", { redirectTo: "/sources" });
+  await signIn("demo", { redirectTo: withBase("/sources") });
 }
 
 export async function signOutAction() {
-  await signOut({ redirectTo: "/" });
+  await signOut({ redirectTo: withBase("/") });
 }
 
 export async function scanInbox(): Promise<ActionResult> {

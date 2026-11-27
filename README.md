@@ -93,6 +93,7 @@ When you sign in, Google warns that the app is unverified. Click **Continue**: t
 | `BREVO_API_KEY` | for reminders | Brevo API key (SMTP & API > API keys). Without it reminders are only logged. |
 | `REMINDER_FROM_EMAIL` | for reminders | Sender address, verified in Brevo. |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | for push | Web Push keys. Generate once with `npx web-push generate-vapid-keys`. |
+| `NEXT_PUBLIC_BASE_PATH` | no | Sub-path to serve under, e.g. `/tally`. Set at build time. |
 | `VAPID_SUBJECT` | for push | Contact for push services, e.g. `mailto:you@example.com`. |
 | `CRON_SECRET` | yes in production | Protects `/api/cron/reminders`. Vercel Cron sends it as a bearer token when it is set in the project. |
 | `APP_URL` | no | Link used in reminder emails. Defaults to `AUTH_URL`. |
@@ -111,6 +112,18 @@ Never commit `.env`. It is in `.gitignore`; only `.env.example` is tracked.
 3. Import the repo into Vercel and add the environment variables above.
 4. `vercel.json` schedules the reminder job daily at 05:00 UTC (08:00 in Nairobi).
 5. Add the production redirect URI to your Google OAuth client.
+
+### Serving under a sub-path
+
+Tally runs at `www.annastacia.dev/tally`, as a zone of the portfolio site (Next.js multi-zones):
+
+- Set `NEXT_PUBLIC_BASE_PATH=/tally` in Tally's Vercel project. Every page, asset and API route then lives under `/tally`, including Auth.js (`/tally/api/auth`) and the service worker.
+- Set `APP_URL=https://www.annastacia.dev/tally` and `AUTH_URL=https://www.annastacia.dev/tally/api/auth`. `APP_URL` is used for links in emails and to allow server actions from that host.
+- The portfolio project rewrites `/tally` and `/tally/:path*` to this deployment.
+- The Google redirect URI is `https://www.annastacia.dev/tally/api/auth/callback/google`.
+- The cron path in `vercel.json` is `/tally/api/cron/reminders`. Change it if you deploy at the root.
+
+Leave `NEXT_PUBLIC_BASE_PATH` empty to run at the root of a domain, as in local development.
 
 ## Notes and limits of this first version
 

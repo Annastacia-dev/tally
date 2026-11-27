@@ -1,6 +1,7 @@
 import { prisma } from "./db";
 import { daysBetween } from "./cycles";
 import { TZ } from "./dates";
+import { BASE_PATH } from "./base-path";
 import { formatMoney } from "./money";
 import { pushToUser } from "./push";
 
@@ -42,7 +43,12 @@ export function reminderHtml(name: string, amount: string, date: Date, days: num
 </div>`;
 }
 
-export const appUrl = () => process.env.APP_URL || process.env.AUTH_URL || "http://localhost:3000";
+/** Public address of the app, including its base path, for links in emails. */
+export const appUrl = () => {
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
+  const auth = process.env.AUTH_URL;
+  return `${auth ? new URL(auth).origin : "http://localhost:3000"}${BASE_PATH}`;
+};
 
 /** Sends one sample reminder to a user, to check that email delivery works. */
 export async function sendTestEmail(user: { email: string; name?: string | null }) {

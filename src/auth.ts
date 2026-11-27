@@ -2,6 +2,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
+import { BASE_PATH } from "@/lib/base-path";
 import { prisma } from "@/lib/db";
 import { demoEnabled, DEMO_EMAIL, googleEnabled } from "@/lib/flags";
 
@@ -45,8 +46,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   // JWT sessions so the demo (credentials) provider works alongside Google.
   session: { strategy: "jwt" },
+  // Auth routes live under the app's base path too: /tally/api/auth/...
+  basePath: `${BASE_PATH}/api/auth`,
   providers,
-  pages: { signIn: "/" },
+  pages: { signIn: `${BASE_PATH}/` },
   callbacks: {
     async jwt({ token, user }) {
       if (user?.id) token.uid = user.id;
