@@ -1,4 +1,4 @@
-// Kumbuka data model.
+// Tally data model.
 // Auth.js tables (User, Account, Session, VerificationToken) plus the app's own
 // Charge, Subscription and Scan tables.
 

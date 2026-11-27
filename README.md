@@ -1,6 +1,6 @@
-# Kumbuka
+# Tally
 
-*Kumbuka* is Swahili for "remember". It finds every subscription you pay for, from your Gmail receipts and your M-Pesa statement, and emails you before each renewal.
+Tally finds every subscription you pay for, from your Gmail receipts and your M-Pesa statement, and emails you before each renewal.
 
 For each subscription it shows what you pay, whether it is weekly, monthly or yearly, when it next renews, and your yearly total across everything.
 
@@ -11,7 +11,7 @@ For each subscription it shows what you pay, whether it is weekly, monthly or ye
 3. **Extract** the service, amount, currency, plan, charge date, billing cycle and a confidence score from each email with Claude, as structured JSON (`src/lib/extract.ts`).
 4. **Infer the pattern** (`src/lib/cycles.ts`): group charges by service, take the cycle from the gaps between charges, set next renewal to last charge plus one cycle, and mark a service "possibly cancelled" when an expected charge is overdue.
 5. **Review**: confirm, edit or dismiss what was found, and add anything missing by hand.
-6. **M-Pesa statement**: upload the PDF. Kumbuka finds paybills and tills you pay on a regular schedule with similar amounts (`src/lib/mpesa.ts`) and merges them with the email results. The same payment seen in both places is counted once.
+6. **M-Pesa statement**: upload the PDF. Tally finds paybills and tills you pay on a regular schedule with similar amounts (`src/lib/mpesa.ts`) and merges them with the email results. The same payment seen in both places is counted once.
 7. **Reminders**: a daily Vercel Cron job (`/api/cron/reminders`) emails you a few days before each renewal, through Brevo.
 
 ## Demo mode
@@ -36,9 +36,9 @@ pnpm dev                      # http://localhost:3000
 For a local database:
 
 ```bash
-createuser -s kumbuka 2>/dev/null; psql -c "alter user kumbuka with password 'kumbuka';"
-createdb -O kumbuka kumbuka
-# DATABASE_URL="postgresql://kumbuka:kumbuka@localhost:5432/kumbuka?schema=public"
+createuser -s tally 2>/dev/null; psql -c "alter user tally with password 'tally';"
+createdb -O tally tally
+# DATABASE_URL="postgresql://tally:tally@localhost:5432/tally?schema=public"
 ```
 
 Generate `AUTH_SECRET` with `openssl rand -base64 32`.
@@ -55,10 +55,10 @@ pnpm e2e      # drives the demo flow in a browser; needs `pnpm dev` running
 
 Gmail read access is a *restricted* scope. While the OAuth app stays in **testing mode** you can use it with up to 100 test users and without Google's verification review. Tokens for test users expire after 7 days, so you may need to sign in again each week.
 
-1. Go to the [Google Cloud console](https://console.cloud.google.com/) and create a project (for example `kumbuka`).
+1. Go to the [Google Cloud console](https://console.cloud.google.com/) and create a project (for example `tally`).
 2. **APIs & Services > Library**: search for **Gmail API** and click **Enable**.
 3. **Google Auth Platform > Branding** (older consoles: **OAuth consent screen**):
-   - App name: Kumbuka. User support email and developer contact: your email.
+   - App name: Tally. User support email and developer contact: your email.
    - Audience / user type: **External**.
    - Leave the publishing status as **Testing**. Do not publish it.
 4. **Audience > Test users**: click **Add users** and add your own Gmail address (and anyone else who should try it, up to 100).
@@ -82,7 +82,7 @@ When you sign in, Google warns that the app is unverified. Click **Continue**: t
 | `DATABASE_URL` | yes | Postgres connection string used by the app. On Supabase use the pooled "Transaction pooler" string (port 6543) with `?pgbouncer=true`. |
 | `DIRECT_URL` | Supabase only | Direct connection (port 5432). Used by `prisma migrate`. |
 | `AUTH_SECRET` | yes | Random string that signs sessions. `openssl rand -base64 32`. |
-| `AUTH_URL` | production | Public URL of the app, e.g. `https://kumbuka.vercel.app`. |
+| `AUTH_URL` | production | Public URL of the app, e.g. `https://tally.vercel.app`. |
 | `AUTH_GOOGLE_ID` | for Gmail | Google OAuth client ID. |
 | `AUTH_GOOGLE_SECRET` | for Gmail | Google OAuth client secret. |
 | `DEMO_MODE` | no | `true` shows "Try the demo". Defaults to on when Google is not configured; `false` hides it. |
@@ -116,7 +116,7 @@ Never commit `.env`. It is in `.gitignore`; only `.env.example` is tracked.
 
 ## Later
 
-- **Forwarding address**: each user gets a unique address and auto-forwards receipts to it, so other people can use Kumbuka without Google's restricted-scope review.
+- **Forwarding address**: each user gets a unique address and auto-forwards receipts to it, so other people can use Tally without Google's restricted-scope review.
 
 ## Project layout
 

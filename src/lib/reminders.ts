@@ -1,12 +1,13 @@
 import { prisma } from "./db";
 import { daysBetween } from "./cycles";
+import { TZ } from "./dates";
 import { formatMoney } from "./money";
 
 // Daily job: email the user a few days before each renewal, once per renewal date.
 
 export async function sendBrevoEmail(to: { email: string; name?: string | null }, subject: string, html: string) {
   const key = process.env.BREVO_API_KEY;
-  const sender = { email: process.env.REMINDER_FROM_EMAIL ?? "reminders@example.com", name: "Kumbuka" };
+  const sender = { email: process.env.REMINDER_FROM_EMAIL ?? "reminders@example.com", name: "Tally" };
   if (!key) {
     console.log(`[reminders] BREVO_API_KEY not set, would send to ${to.email}: ${subject}`);
     return { dryRun: true };
@@ -22,13 +23,13 @@ export async function sendBrevoEmail(to: { email: string; name?: string | null }
 
 export function reminderHtml(name: string, amount: string, date: Date, days: number, appUrl: string) {
   const when = days <= 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`;
-  const nice = date.toLocaleDateString("en-KE", { weekday: "long", day: "numeric", month: "long" });
+  const nice = date.toLocaleDateString("en-KE", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" });
   return `<div style="font-family:system-ui,sans-serif;max-width:480px;margin:auto;padding:24px">
-  <p style="font-size:14px;color:#6b6b80">Kumbuka reminder</p>
+  <p style="font-size:14px;color:#6b6b80">Tally reminder</p>
   <h1 style="font-size:22px;margin:0 0 12px">${name} renews ${when}</h1>
   <p style="font-size:16px">You will be charged <b>${amount}</b> on ${nice}.</p>
   <p style="font-size:14px;color:#6b6b80">Still using it? Great, nothing to do. If not, cancel before then.</p>
-  <p><a href="${appUrl}/dashboard" style="display:inline-block;background:#7c5cff;color:#fff;padding:10px 16px;border-radius:999px;text-decoration:none">Open Kumbuka</a></p>
+  <p><a href="${appUrl}/dashboard" style="display:inline-block;background:#7c5cff;color:#fff;padding:10px 16px;border-radius:999px;text-decoration:none">Open Tally</a></p>
 </div>`;
 }
 

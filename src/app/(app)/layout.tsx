@@ -15,7 +15,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     <div className="min-h-dvh pb-28 md:pb-12">
       <header className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <Link href="/dashboard" className="font-display text-xl font-bold">
-          kumbuka<span className="text-accent">.</span>
+          tally<span className="text-accent">.</span>
         </Link>
         <DesktopNav pending={pending} />
         <div className="flex items-center gap-2">

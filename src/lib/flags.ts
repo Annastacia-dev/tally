@@ -1,4 +1,4 @@
-export const DEMO_EMAIL = "demo@kumbuka.local";
+export const DEMO_EMAIL = "demo@tally.local";
 
 export function googleEnabled() {
   return Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);

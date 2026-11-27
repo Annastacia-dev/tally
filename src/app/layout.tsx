@@ -7,7 +7,7 @@ const jakarta = Plus_Jakarta_Sans({ variable: "--font-jakarta", subsets: ["latin
 const bricolage = Bricolage_Grotesque({ variable: "--font-bricolage", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Kumbuka: every subscription, remembered",
+  title: "Tally: every subscription, tallied",
   description: "Find every subscription in your inbox and M-Pesa statement, and get reminded before each renewal.",
 };
 

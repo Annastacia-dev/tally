@@ -21,7 +21,7 @@ export default async function Sources() {
     <div className="space-y-5">
       <div>
         <h1 className="font-display text-3xl font-bold">Sources</h1>
-        <p className="text-ink-2">Where Kumbuka looks for your subscriptions.</p>
+        <p className="text-ink-2">Where Tally looks for your subscriptions.</p>
       </div>
 
       <section className="card p-5 sm:p-6">

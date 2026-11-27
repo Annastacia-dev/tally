@@ -38,7 +38,7 @@ export default async function Dashboard() {
       <div className="card mx-auto mt-10 max-w-lg p-8 text-center">
         <div className="text-5xl" aria-hidden>🔍</div>
         <h1 className="mt-4 font-display text-2xl font-bold">Nothing tracked yet</h1>
-        <p className="mt-2 text-ink-2">Scan your inbox or upload an M-Pesa statement and Kumbuka will find your subscriptions.</p>
+        <p className="mt-2 text-ink-2">Scan your inbox or upload an M-Pesa statement and Tally will find your subscriptions.</p>
         <Link href="/sources" className="btn btn-primary mt-6">Find my subscriptions</Link>
       </div>
     );

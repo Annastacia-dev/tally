@@ -18,7 +18,7 @@ export default async function Landing() {
   return (
     <main className="relative flex min-h-dvh flex-col overflow-hidden">
       <header className="flex items-center justify-between p-5">
-        <span className="font-display text-xl font-bold">kumbuka<span className="text-accent">.</span></span>
+        <span className="font-display text-xl font-bold">tally<span className="text-accent">.</span></span>
         <ThemeToggle />
       </header>
 
@@ -34,14 +34,14 @@ export default async function Landing() {
       ))}
 
       <section className="relative z-10 mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center px-6 pb-16 text-center">
-        <span className="chip mb-5 bg-accent-soft text-ink">Swahili for &ldquo;remember&rdquo;</span>
+        <span className="chip mb-5 bg-accent-soft text-ink">Built for email receipts and M-Pesa</span>
         <h1 className="font-display text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl">
           Every subscription,
           <br />
-          <span className="text-accent">remembered.</span>
+          <span className="text-accent">tallied.</span>
         </h1>
         <p className="mt-5 max-w-md text-base text-ink-2 sm:text-lg">
-          Kumbuka reads your billing emails and M-Pesa statement, finds what you pay for, and nudges you before each renewal.
+          Tally reads your billing emails and M-Pesa statement, finds what you pay for, and nudges you before each renewal.
         </p>
 
         <div className="mt-8 flex w-full max-w-xs flex-col gap-3">
