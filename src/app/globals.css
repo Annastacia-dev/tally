@@ -65,6 +65,7 @@
   --color-pink: var(--pink);
   --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-bricolage), var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-brand: var(--font-space-mono), ui-monospace, monospace;
 }
 
 body {
