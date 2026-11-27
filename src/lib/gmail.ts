@@ -35,10 +35,29 @@ async function accessToken(userId: string): Promise<string> {
   return json.access_token;
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export class GmailRateLimitError extends Error {}
+
+// Gmail limits each user to a quota of units per minute and answers 429, or
+// 403 with reason rateLimitExceeded, when we go over. Back off and retry:
+// the window is one minute, so waits add up to a little over that.
+const BACKOFF_MS = [2_000, 5_000, 10_000, 20_000, 30_000];
+
 async function gget<T>(token: string, path: string): Promise<T> {
-  const res = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error(`Gmail ${path.split("?")[0]} failed: ${res.status} ${await res.text()}`);
-  return res.json() as Promise<T>;
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (res.ok) return res.json() as Promise<T>;
+    const text = await res.text();
+    const limited = res.status === 429 || (res.status === 403 && /rateLimitExceeded|RATE_LIMIT_EXCEEDED/.test(text));
+    if (limited && attempt < BACKOFF_MS.length) {
+      const retryAfter = Number(res.headers.get("retry-after")) * 1000;
+      await sleep(retryAfter > 0 ? Math.min(retryAfter, 60_000) : BACKOFF_MS[attempt] + Math.random() * 1000);
+      continue;
+    }
+    if (limited) throw new GmailRateLimitError("Gmail is limiting how fast we can read your inbox. Wait a minute and scan again; emails already read are kept.");
+    throw new Error(`Gmail ${path.split("?")[0]} failed: ${res.status} ${text.slice(0, 300)}`);
+  }
 }
 
 type Part = { mimeType?: string; body?: { data?: string }; parts?: Part[] };

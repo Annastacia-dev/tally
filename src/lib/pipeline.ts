@@ -16,26 +16,37 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
     Array.from({ length: Math.min(limit, items.length) }, async () => {
       while (next < items.length) {
         const i = next++;
-        out[i] = await fn(items[i]);
+        try {
+          out[i] = await fn(items[i]);
+        } catch (err) {
+          next = items.length; // stop the other workers picking up new items
+          throw err;
+        }
       }
     }),
   );
   return out;
 }
 
-/** Run extraction over emails and store the subscription charges we find. */
-export async function ingestEmails(userId: string, scanId: string, emails: EmailInput[]) {
-  // Skip emails we have already processed in a previous scan.
+/**
+ * Load each email, run extraction and store the subscription charges we find.
+ * Emails are loaded and extracted a few at a time, so a scan that stops part
+ * way (for example on a Gmail rate limit) keeps what it already found.
+ */
+export async function ingestEmails(userId: string, scanId: string, ids: string[], load: (id: string) => Promise<EmailInput>) {
+  // Skip emails we already stored a charge for, before spending quota on them.
   const seen = new Set(
     (await prisma.charge.findMany({ where: { userId, source: "email" }, select: { sourceRef: true } })).map((c) => c.sourceRef),
   );
-  const todo = emails.filter((e) => !seen.has(e.id));
-  await prisma.scan.update({ where: { id: scanId }, data: { found: emails.length } });
+  const todo = ids.filter((id) => !seen.has(id));
+  await prisma.scan.update({ where: { id: scanId }, data: { found: ids.length } });
 
-  let processed = emails.length - todo.length;
+  let processed = ids.length - todo.length;
   let stored = 0;
-  await mapLimit(todo, 4, async (email) => {
-    const x = await extract(email);
+  try {
+    await mapLimit(todo, 4, async (id) => {
+      const email = await load(id);
+      const x = await extract(email);
     processed++;
     if (processed % 5 === 0) await prisma.scan.update({ where: { id: scanId }, data: { processed } });
     if (!x || !x.is_subscription_charge || !x.service_name || x.amount <= 0 || x.confidence < MIN_CONFIDENCE) return;
@@ -58,11 +69,16 @@ export async function ingestEmails(userId: string, scanId: string, emails: Email
       },
     });
     stored++;
-  });
+    });
+  } finally {
+    // Keep whatever was found, even if the scan stopped part way.
+    await prisma.scan.update({ where: { id: scanId }, data: { processed } });
+    if (stored > 0) await rebuildSubscriptions(userId);
+  }
 
-  await prisma.scan.update({ where: { id: scanId }, data: { processed, status: "done", finishedAt: new Date() } });
-  await rebuildSubscriptions(userId);
-  return { emails: emails.length, newCharges: stored };
+  await prisma.scan.update({ where: { id: scanId }, data: { status: "done", finishedAt: new Date() } });
+  if (stored === 0) await rebuildSubscriptions(userId);
+  return { emails: ids.length, newCharges: stored };
 }
 
 export type StatementResult = {

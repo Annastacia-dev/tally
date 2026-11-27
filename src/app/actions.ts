@@ -42,19 +42,19 @@ export async function scanInbox(): Promise<ActionResult> {
   const useFixtures = user.isDemo;
   const scan = await prisma.scan.create({ data: { userId: user.id, kind: useFixtures ? "fixtures" : "gmail" } });
   try {
-    let emails;
+    let res;
     if (useFixtures) {
-      emails = fixtureEmails();
+      const emails = new Map(fixtureEmails().map((e) => [e.id, e]));
+      res = await ingestEmails(user.id, scan.id, [...emails.keys()], async (id) => emails.get(id)!);
     } else {
       const months = Number(process.env.SCAN_MONTHS || 18);
       const { token, ids } = await listBillingMessageIds(user.id, months);
-      emails = [];
-      for (const id of ids) emails.push(await fetchEmail(token, id));
+      res = await ingestEmails(user.id, scan.id, ids, (id) => fetchEmail(token, id));
     }
-    const res = await ingestEmails(user.id, scan.id, emails);
     refresh();
     return { ok: true, message: `Read ${res.emails} emails and found ${res.newCharges} new charges.` };
   } catch (err) {
+    refresh();
     const message = err instanceof Error ? err.message : String(err);
     await prisma.scan.update({ where: { id: scan.id }, data: { status: "failed", error: message, finishedAt: new Date() } });
     return { ok: false, message };
