@@ -29,6 +29,7 @@ model User {
   subscriptions    Subscription[]
   scans            Scan[]
   readEmails       ReadEmail[]
+  pushDevices      PushDevice[]
 }
 
 model Account {
@@ -144,4 +145,18 @@ model ReadEmail {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, messageId])
+}
+
+/// A browser or installed app that receives push notifications for a user.
+model PushDevice {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

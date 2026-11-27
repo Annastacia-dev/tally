@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db";
 import { costUsd } from "@/lib/extract";
 import { fetchEmail, listBillingMessageIds } from "@/lib/gmail";
 import { alreadyRead, ingestEmails, ingestStatement } from "@/lib/pipeline";
+import { isDeviceInput, pushToUser, removeDevice, saveDevice } from "@/lib/push";
 import { runReminders, sendTestEmail } from "@/lib/reminders";
 import { displayName, serviceKey, serviceMeta } from "@/lib/services";
 
@@ -183,6 +184,32 @@ export async function sendTestReminder(): Promise<ActionResult> {
   }
 }
 
+export async function savePushDevice(device: unknown, userAgent?: string): Promise<ActionResult> {
+  const user = await me();
+  if (!isDeviceInput(device)) return { ok: false, message: "That push subscription looks wrong." };
+  await saveDevice(user.id, device, userAgent);
+  return { ok: true, message: "Notifications are on for this device." };
+}
+
+export async function removePushDevice(endpoint: string): Promise<ActionResult> {
+  const user = await me();
+  await removeDevice(user.id, String(endpoint));
+  return { ok: true, message: "Notifications are off for this device." };
+}
+
+export async function sendTestPush(): Promise<ActionResult> {
+  const user = await me();
+  const reached = await pushToUser(user.id, {
+    title: "Netflix renews in 3 days (test)",
+    body: "KES 1,100 will be charged. This is a test notification from Tally.",
+    url: "/dashboard",
+    tag: "tally-test",
+  });
+  return reached
+    ? { ok: true, message: `Test notification sent to ${reached} device${reached === 1 ? "" : "s"}.` }
+    : { ok: false, message: "No device has notifications on yet." };
+}
+
 export async function sendRemindersNow(): Promise<ActionResult> {
   const user = await me();
   if (user.isDemo) return { ok: false, message: "Demo accounts never get emails. Sign in with Google to try reminders." };
@@ -190,7 +217,7 @@ export async function sendRemindersNow(): Promise<ActionResult> {
   return {
     ok: true,
     message: sent.length
-      ? `${sent.length} reminder(s) ${sent.every((s) => s.dryRun) ? "logged (no BREVO_API_KEY, dry run)" : "sent"}.`
+      ? `${sent.length} reminder(s) ${sent.every((s) => s.dryRun) ? "logged (no BREVO_API_KEY, dry run)" : "sent"}${sent.some((s) => s.pushed) ? ", with notifications" : ""}.`
       : "Nothing renews inside your reminder window.",
   };
 }

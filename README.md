@@ -8,12 +8,12 @@ For each subscription it shows what you pay, whether it is weekly, monthly or ye
 
 1. **Sign in with Google** with read-only Gmail access (`gmail.readonly`).
 2. **Scan** the last 18 months of mail for receipts, invoices, renewal notices and known subscription senders (`src/lib/services.ts`).
-3. **Extract** the service, amount, currency, plan, charge date, billing cycle and a confidence score from each email with Claude, as structured JSON (`src/lib/extract.ts`).
+3. **Extract** the service, amount, currency, plan, charge date, billing cycle and a confidence score from each email with Claude, as structured JSON (`src/lib/extract.ts`). Emails that name no amount of money are skipped without calling Claude, and long emails are shortened first (`src/lib/prefilter.ts`), which keeps the cost of a scan down.
 4. **Infer the pattern** (`src/lib/cycles.ts`): group charges by service, take the cycle from the gaps between charges, set next renewal to last charge plus one cycle, and mark a service "possibly cancelled" when an expected charge is overdue.
 5. **Review**: confirm, edit or dismiss what was found, and add anything missing by hand.
 6. **M-Pesa statement**: upload the PDF. Tally finds paybills and tills you pay on a regular schedule with similar amounts (`src/lib/mpesa.ts`) and merges them with the email results. The same payment seen in both places is counted once.
 7. **Bank statement**: upload the same way. Tally tells the two apart on its own. Bank layouts vary, so with `ANTHROPIC_API_KEY` set Claude lists the payments out (the statement text is sent to the Claude API). Without a key, a rule-based reader works out each debit from the running balance (`src/lib/bank.ts`). Both feed the same recurring detection (`src/lib/recurring.ts`).
-7. **Reminders**: a daily Vercel Cron job (`/api/cron/reminders`) emails you a few days before each renewal, through Brevo.
+8. **Reminders**: a daily Vercel Cron job (`/api/cron/reminders`) emails you a few days before each renewal, through Brevo, and sends a push notification to each device you turned notifications on for (`src/lib/push.ts`). Tally is an installable app; on iPhone and iPad, notifications need it added to the Home Screen first.
 
 ## Demo mode
 
@@ -91,6 +91,8 @@ When you sign in, Google warns that the app is unverified. Click **Continue**: t
 | `ANTHROPIC_MODEL` | no | Model override. Default `claude-opus-5-5`. |
 | `BREVO_API_KEY` | for reminders | Brevo API key (SMTP & API > API keys). Without it reminders are only logged. |
 | `REMINDER_FROM_EMAIL` | for reminders | Sender address, verified in Brevo. |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | for push | Web Push keys. Generate once with `npx web-push generate-vapid-keys`. |
+| `VAPID_SUBJECT` | for push | Contact for push services, e.g. `mailto:you@example.com`. |
 | `CRON_SECRET` | yes in production | Protects `/api/cron/reminders`. Vercel Cron sends it as a bearer token when it is set in the project. |
 | `APP_URL` | no | Link used in reminder emails. Defaults to `AUTH_URL`. |
 | `SCAN_MONTHS` | no | How far back to scan Gmail. Default 18. |

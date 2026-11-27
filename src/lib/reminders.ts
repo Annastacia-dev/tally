@@ -2,8 +2,10 @@ import { prisma } from "./db";
 import { daysBetween } from "./cycles";
 import { TZ } from "./dates";
 import { formatMoney } from "./money";
+import { pushToUser } from "./push";
 
-// Daily job: email the user a few days before each renewal, once per renewal date.
+// Daily job: email the user, and notify their devices, a few days before each
+// renewal, once per renewal date.
 
 /** "Tally <noreply@example.com>" or a bare "noreply@example.com". */
 export function parseSender(value: string | undefined) {
@@ -40,7 +42,7 @@ export function reminderHtml(name: string, amount: string, date: Date, days: num
 </div>`;
 }
 
-const appUrl = () => process.env.APP_URL || process.env.AUTH_URL || "http://localhost:3000";
+export const appUrl = () => process.env.APP_URL || process.env.AUTH_URL || "http://localhost:3000";
 
 /** Sends one sample reminder to a user, to check that email delivery works. */
 export async function sendTestEmail(user: { email: string; name?: string | null }) {
@@ -58,7 +60,7 @@ export async function runReminders(now = new Date(), userId?: string) {
     include: { subscriptions: { where: { status: { not: "dismissed" }, possiblyCancelled: false, nextRenewalAt: { not: null } } } },
   });
 
-  const sent: { user: string; service: string; renewsOn: string; dryRun: boolean }[] = [];
+  const sent: { user: string; service: string; renewsOn: string; dryRun: boolean; pushed: number }[] = [];
   for (const user of users) {
     for (const sub of user.subscriptions) {
       const renew = sub.nextRenewalAt!;
@@ -67,14 +69,21 @@ export async function runReminders(now = new Date(), userId?: string) {
       if (sub.lastRemindedFor && sub.lastRemindedFor.getTime() === renew.getTime()) continue;
 
       const amount = formatMoney(sub.amount, sub.currency);
-      const subject = `${sub.name} renews ${days <= 1 ? (days === 0 ? "today" : "tomorrow") : `in ${days} days`} (${amount})`;
+      const when = days <= 1 ? (days === 0 ? "today" : "tomorrow") : `in ${days} days`;
+      const subject = `${sub.name} renews ${when} (${amount})`;
       const res = await sendBrevoEmail(
         { email: user.email!, name: user.name },
         subject,
         reminderHtml(sub.name, amount, renew, days, appUrl()),
       );
+      const pushed = await pushToUser(user.id, {
+        title: `${sub.name} renews ${when}`,
+        body: `${amount} will be charged. Still using it? If not, cancel before then.`,
+        url: "/dashboard",
+        tag: `renewal-${sub.id}`,
+      });
       await prisma.subscription.update({ where: { id: sub.id }, data: { lastRemindedFor: renew } });
-      sent.push({ user: user.email!, service: sub.name, renewsOn: renew.toISOString().slice(0, 10), dryRun: res.dryRun });
+      sent.push({ user: user.email!, service: sub.name, renewsOn: renew.toISOString().slice(0, 10), dryRun: res.dryRun, pushed });
     }
   }
   return sent;
