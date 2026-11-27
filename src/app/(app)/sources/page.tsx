@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
-import { PushToggle } from "@/components/PushToggle";
-import { StatementUpload, RemindNow, ScanButton } from "@/components/SourceActions";
+import { RemindersCard } from "@/components/RemindersCard";
+import { StatementUpload, ScanButton } from "@/components/SourceActions";
 import { fmtDate } from "@/lib/dates";
 import { prisma } from "@/lib/db";
 import { costUsd, EMAIL_MODEL, hasClaude, MODEL } from "@/lib/extract";
 import { pushPublicKey } from "@/lib/push";
-import { resetData, updateSettings } from "../../actions";
+import { resetData } from "../../actions";
 
 export const maxDuration = 300;
 
@@ -102,29 +102,14 @@ export default async function Sources() {
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-sun/25 text-2xl" aria-hidden>⏰</span>
           <div className="flex-1">
             <h2 className="font-display text-lg font-bold">Reminders</h2>
-            <p className="text-sm text-ink-2">
-              We email {user.email} before each renewal, and notify any device you turn notifications on for. The check runs every
-              morning.
-            </p>
-            <form action={updateSettings} className="mt-4 flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-2 text-sm font-semibold">
-                <input type="checkbox" name="remindersOn" defaultChecked={user.remindersOn} className="h-4 w-4 accent-[var(--accent)]" />
-                Remind me
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="number" name="remindDaysBefore" min={0} max={30} defaultValue={user.remindDaysBefore} className="input w-20" />
-                days before
-              </label>
-              <button className="btn btn-ghost">Save</button>
-            </form>
-            <div className="mt-3">
-              <RemindNow />
-            </div>
-            <div className="mt-5 border-t-2 border-dashed border-line pt-4">
-              <h3 className="text-sm font-bold">Notifications on this device</h3>
-              <p className="mb-3 text-xs text-ink-2">A notification arrives with each reminder email. Turn it on on each phone or computer you use.</p>
-              <PushToggle publicKey={pushPublicKey()} />
-            </div>
+            <p className="mb-4 text-sm text-ink-2">A heads-up before you are charged, so you can cancel what you no longer use.</p>
+            <RemindersCard
+              email={user.email}
+              remindersOn={user.remindersOn}
+              days={user.remindDaysBefore}
+              publicKey={pushPublicKey()}
+              demo={user.isDemo}
+            />
           </div>
         </div>
       </section>
