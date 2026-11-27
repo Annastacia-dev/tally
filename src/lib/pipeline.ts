@@ -1,0 +1,165 @@
+import { prisma } from "./db";
+import { addCycle, inferSubscription, type Cycle } from "./cycles";
+import { extract, type EmailInput } from "./extract";
+import { findRecurring, parseStatementText, pdfToText } from "./mpesa";
+import { displayName, serviceKey, serviceMeta } from "./services";
+
+// Glue between sources (email, M-Pesa) and the Subscription table.
+
+const MIN_CONFIDENCE = 0.5;
+
+async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const i = next++;
+        out[i] = await fn(items[i]);
+      }
+    }),
+  );
+  return out;
+}
+
+/** Run extraction over emails and store the subscription charges we find. */
+export async function ingestEmails(userId: string, scanId: string, emails: EmailInput[]) {
+  // Skip emails we have already processed in a previous scan.
+  const seen = new Set(
+    (await prisma.charge.findMany({ where: { userId, source: "email" }, select: { sourceRef: true } })).map((c) => c.sourceRef),
+  );
+  const todo = emails.filter((e) => !seen.has(e.id));
+  await prisma.scan.update({ where: { id: scanId }, data: { found: emails.length } });
+
+  let processed = emails.length - todo.length;
+  let stored = 0;
+  await mapLimit(todo, 4, async (email) => {
+    const x = await extract(email);
+    processed++;
+    if (processed % 5 === 0) await prisma.scan.update({ where: { id: scanId }, data: { processed } });
+    if (!x || !x.is_subscription_charge || !x.service_name || x.amount <= 0 || x.confidence < MIN_CONFIDENCE) return;
+
+    const chargedAt = new Date(x.charge_date);
+    await prisma.charge.create({
+      data: {
+        userId,
+        source: "email",
+        sourceRef: email.id,
+        serviceName: displayName(x.service_name),
+        serviceKey: serviceKey(x.service_name),
+        amount: x.amount,
+        currency: x.currency.toUpperCase(),
+        plan: x.plan || null,
+        chargedAt: isNaN(chargedAt.getTime()) ? new Date(email.date) : chargedAt,
+        cycleHint: x.billing_cycle,
+        confidence: x.confidence,
+        snippet: `${email.subject}\n${email.body.slice(0, 400)}`,
+      },
+    });
+    stored++;
+  });
+
+  await prisma.scan.update({ where: { id: scanId }, data: { processed, status: "done", finishedAt: new Date() } });
+  await rebuildSubscriptions(userId);
+  return { emails: emails.length, newCharges: stored };
+}
+
+/** Parse an M-Pesa statement PDF and store charges for recurring payments. */
+export async function ingestMpesa(userId: string, pdf: Uint8Array) {
+  const text = await pdfToText(pdf);
+  const txns = parseStatementText(text);
+  if (txns.length === 0) {
+    throw new Error("No M-Pesa transactions found. Is this a Safaricom full statement PDF (not password protected)?");
+  }
+  const recurring = findRecurring(txns);
+  const seen = new Set(
+    (await prisma.charge.findMany({ where: { userId, source: "mpesa" }, select: { sourceRef: true } })).map((c) => c.sourceRef),
+  );
+  let created = 0;
+  for (const r of recurring) {
+    for (const t of r.txns) {
+      if (seen.has(t.receipt)) continue;
+      await prisma.charge.create({
+        data: {
+          userId,
+          source: "mpesa",
+          sourceRef: t.receipt,
+          serviceName: r.serviceName,
+          serviceKey: r.serviceKey,
+          amount: t.withdrawn,
+          currency: "KES",
+          chargedAt: t.at,
+          cycleHint: r.cycle,
+          confidence: r.confidence,
+          snippet: t.details,
+        },
+      });
+      created++;
+    }
+  }
+  await rebuildSubscriptions(userId);
+  return { transactions: txns.length, recurring: recurring.length, newCharges: created };
+}
+
+/** Re-derive every subscription from its charges. Keeps user edits and decisions. */
+export async function rebuildSubscriptions(userId: string, now = new Date()) {
+  const charges = await prisma.charge.findMany({ where: { userId }, orderBy: { chargedAt: "asc" } });
+  const byKey = new Map<string, typeof charges>();
+  for (const c of charges) {
+    const list = byKey.get(c.serviceKey) ?? [];
+    list.push(c);
+    byKey.set(c.serviceKey, list);
+  }
+
+  for (const [key, list] of byKey) {
+    const inferred = inferSubscription(list, now);
+    if (!inferred) continue;
+    const existing = await prisma.subscription.findUnique({ where: { userId_key: { userId, key } } });
+    const meta = serviceMeta(key);
+    const sources = [...new Set(list.map((c) => c.source))];
+    const latestName = list[list.length - 1].serviceName;
+
+    const derived = {
+      lastChargedAt: inferred.lastChargedAt,
+      possiblyCancelled: inferred.possiblyCancelled,
+      sources,
+      confidence: inferred.confidence,
+    };
+
+    let sub;
+    if (existing) {
+      // If the user edited the price or cycle, keep their values and only
+      // move the renewal date forward from the latest charge.
+      const cycle = existing.edited ? existing.cycle : inferred.cycle;
+      sub = await prisma.subscription.update({
+        where: { id: existing.id },
+        data: {
+          ...derived,
+          ...(existing.edited
+            ? {}
+            : { amount: inferred.amount, currency: inferred.currency, cycle, plan: inferred.plan, name: latestName }),
+          nextRenewalAt: existing.edited
+            ? addCycle(inferred.lastChargedAt, cycle as Cycle)
+            : inferred.nextRenewalAt,
+        },
+      });
+    } else {
+      sub = await prisma.subscription.create({
+        data: {
+          userId,
+          key,
+          name: latestName,
+          amount: inferred.amount,
+          currency: inferred.currency,
+          cycle: inferred.cycle,
+          plan: inferred.plan,
+          nextRenewalAt: inferred.nextRenewalAt,
+          domain: meta.domain,
+          category: meta.category,
+          ...derived,
+        },
+      });
+    }
+    await prisma.charge.updateMany({ where: { userId, serviceKey: key }, data: { subscriptionId: sub.id } });
+  }
+}
