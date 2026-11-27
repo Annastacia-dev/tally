@@ -59,7 +59,7 @@ export async function scanInbox(): Promise<ActionResult> {
     const tokens = res.inputTokens + res.outputTokens;
     const cost = costUsd(res, EMAIL_MODEL);
     const spent = tokens ? ` Claude used ${tokens.toLocaleString()} tokens${cost !== null ? ` (about US$${cost.toFixed(2)})` : ""}.` : "";
-    return { ok: true, message: `Read ${res.emails} emails and found ${res.newCharges} new charges.${res.skipped ? ` Skipped ${res.skipped} with no amount in them.` : ""}${spent}` };
+    return { ok: true, message: `Read ${res.emails} emails and found ${res.newCharges} new charges.${res.purchases ? ` Also ${res.purchases} one-off purchases.` : ""}${res.skipped ? ` Skipped ${res.skipped} with no amount in them.` : ""}${spent}` };
   } catch (err) {
     refresh();
     const message = err instanceof Error ? err.message : String(err);
@@ -91,7 +91,7 @@ export async function uploadStatement(_: ActionResult | null, form: FormData): P
     const what = res.kind === "mpesa" ? "M-Pesa statement" : "bank statement";
     return {
       ok: true,
-      message: `Read your ${what}: ${res.transactions} payments out, ${res.recurring} recurring.`,
+      message: `Read your ${what}: ${res.transactions} payments out, ${res.recurring} recurring, ${res.purchases} new one-off purchases.`,
     };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : String(err) };
@@ -227,6 +227,7 @@ export async function sendRemindersNow(): Promise<ActionResult> {
 export async function resetData() {
   const user = await me();
   await prisma.charge.deleteMany({ where: { userId: user.id } });
+  await prisma.purchase.deleteMany({ where: { userId: user.id } });
   await prisma.subscription.deleteMany({ where: { userId: user.id } });
   await prisma.scan.deleteMany({ where: { userId: user.id } });
   await prisma.readEmail.deleteMany({ where: { userId: user.id } });

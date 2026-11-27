@@ -30,6 +30,7 @@ model User {
   scans            Scan[]
   readEmails       ReadEmail[]
   pushDevices      PushDevice[]
+  purchases        Purchase[]
 }
 
 model Account {
@@ -160,4 +161,24 @@ model PushDevice {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+/// A one-off payment: an order, a ride, a ticket, a till payment. Not part of a subscription.
+model Purchase {
+  id          String   @id @default(cuid())
+  userId      String
+  source      String // "email" | "mpesa" | "bank"
+  sourceRef   String // Gmail message id, M-Pesa receipt, bank row ref
+  merchant    String
+  merchantKey String
+  item        String? // what was bought, when the source says
+  amount      Float
+  currency    String
+  at          DateTime
+  snippet     String?  @db.Text
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, source, sourceRef])
+  @@index([userId, at])
 }

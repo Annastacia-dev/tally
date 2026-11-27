@@ -8,14 +8,23 @@ export const ExtractionSchema = z.object({
   is_subscription_charge: z
     .boolean()
     .describe("True only if this email confirms a payment, invoice or upcoming renewal for a recurring subscription."),
+  is_one_off_purchase: z
+    .boolean()
+    .describe(
+      "True if this email is a receipt or confirmation for a completed one-off payment that is not a subscription: an order, a ride, a ticket, a meal, a bill paid once. False for subscriptions, marketing, refunds, and shipping notices that do not show a payment.",
+    ),
   service_name: z
     .string()
     .describe(
-      "The brand or product being paid for, as the person would name it: 'Netflix', 'Supabase', 'Namecheap'. Not the sender or team ('Supabase Billing Team'), and no plan, domain or account details. Empty if none.",
+      "The brand, product or shop being paid, as the person would name it: 'Netflix', 'Supabase', 'Jumia', 'Uber'. Not the sender or team ('Supabase Billing Team'), and no plan, domain or account details. Empty if none.",
     ),
   amount: z.number().describe("Amount charged, as a plain number. 0 if unknown."),
   currency: z.string().describe("ISO 4217 code, e.g. KES, USD. Use KES for 'Ksh' or 'KSh'."),
-  plan: z.string().describe("Plan, tier or what is renewed, e.g. 'Pro', 'Premium Family', 'Domain: example.org'. Empty if not stated."),
+  plan: z
+    .string()
+    .describe(
+      "For a subscription, the plan, tier or what is renewed, e.g. 'Pro', 'Domain: example.org'. For a one-off purchase, what was bought, e.g. 'Wireless earbuds', 'Ride to Westlands'. Empty if not stated.",
+    ),
   charge_date: z.string().describe("Date of the charge or renewal in YYYY-MM-DD."),
   billing_cycle: z.enum(["weekly", "monthly", "quarterly", "yearly", "unknown"]),
   confidence: z.number().describe("0 to 1: how sure you are about the fields above."),
@@ -42,7 +51,8 @@ export const EMAIL_MODEL = process.env.EMAIL_MODEL || "claude-haiku-5-5";
 
 const SYSTEM = `You read one email at a time from a person's inbox and extract subscription billing details.
 Only mark is_subscription_charge true for recurring services (streaming, music, apps, cloud storage, SaaS, gyms, internet, TV).
-One-off purchases, shipping notices, marketing, and password resets are not subscription charges.
+Mark is_one_off_purchase true for receipts of single payments (orders, rides, tickets, meals). At most one of the two is true.
+Shipping notices, marketing, refunds and password resets are neither.
 If the email announces an upcoming renewal, use the renewal date as charge_date.
 If the email has no explicit date, use the email's sent date.`;
 
@@ -126,15 +136,17 @@ export function extractWithRules(email: EmailInput): Extraction {
   const dated = text.match(/(20\d\d-\d\d-\d\d)/)?.[1];
 
   const ok = recurring && billing && !notBilling && Boolean(m);
+  const purchase = !ok && !notBilling && Boolean(m) && /(receipt|order|paid|payment|trip|ride)/.test(lower);
   return {
     is_subscription_charge: ok,
-    service_name: ok ? service.trim() : "",
+    is_one_off_purchase: purchase,
+    service_name: ok ? service.trim() : purchase ? fromName : "",
     amount: m ? Number(m[2].replace(/,/g, "")) : 0,
     currency: m ? CURRENCY_MAP[m[1].toUpperCase()] ?? "KES" : "KES",
     plan,
     charge_date: dated ?? email.date.slice(0, 10),
     billing_cycle: cycle,
-    confidence: ok ? 0.75 : 0.2,
+    confidence: ok || purchase ? 0.75 : 0.2,
   };
 }
 

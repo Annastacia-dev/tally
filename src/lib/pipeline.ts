@@ -2,7 +2,7 @@ import { prisma } from "./db";
 import { addCycle, inferSubscription, type Cycle } from "./cycles";
 import { extract, hasClaude, type EmailInput } from "./extract";
 import { findBankRecurring, readBankStatement } from "./bank";
-import { findRecurring, parseStatementText, pdfToText } from "./mpesa";
+import { counterpartyOf, findRecurring, parseStatementText, pdfToText } from "./mpesa";
 import { mentionsMoney } from "./prefilter";
 import { cleanServiceName, displayName, serviceKey, serviceMeta } from "./services";
 
@@ -52,6 +52,7 @@ export async function ingestEmails(userId: string, scanId: string, ids: string[]
   let processed = ids.length - todo.length;
   let stored = 0;
   let skipped = 0;
+  let purchases = 0;
   const tokens = { inputTokens: 0, outputTokens: 0 };
   try {
     await mapLimit(todo, 4, async (id) => {
@@ -73,9 +74,32 @@ export async function ingestEmails(userId: string, scanId: string, ids: string[]
       }
     processed++;
     if (processed % 5 === 0) await prisma.scan.update({ where: { id: scanId }, data: { processed, ...tokens } });
-    if (!x || !x.is_subscription_charge || !x.service_name || x.amount <= 0 || x.confidence < MIN_CONFIDENCE) return;
-
+    if (!x || !x.service_name || x.amount <= 0 || x.confidence < MIN_CONFIDENCE) return;
     const chargedAt = new Date(x.charge_date);
+    if (!x.is_subscription_charge) {
+      if (!x.is_one_off_purchase) return;
+      const merchant = displayName(cleanServiceName(x.service_name));
+      await prisma.purchase.createMany({
+        data: [
+          {
+            userId,
+            source: "email",
+            sourceRef: email.id,
+            merchant,
+            merchantKey: serviceKey(merchant),
+            item: x.plan || null,
+            amount: x.amount,
+            currency: x.currency.toUpperCase(),
+            at: isNaN(chargedAt.getTime()) ? new Date(email.date) : chargedAt,
+            snippet: `${email.subject}\n${email.body.slice(0, 400)}`,
+          },
+        ],
+        skipDuplicates: true,
+      });
+      purchases++;
+      return;
+    }
+
     await prisma.charge.create({
       data: {
         userId,
@@ -102,7 +126,7 @@ export async function ingestEmails(userId: string, scanId: string, ids: string[]
 
   await prisma.scan.update({ where: { id: scanId }, data: { status: "done", finishedAt: new Date() } });
   if (stored === 0) await rebuildSubscriptions(userId);
-  return { emails: ids.length, newCharges: stored, skipped, ...tokens };
+  return { emails: ids.length, newCharges: stored, purchases, skipped, ...tokens };
 }
 
 export type StatementResult = {
@@ -111,7 +135,36 @@ export type StatementResult = {
   transactions: number;
   recurring: number;
   newCharges: number;
+  purchases: number;
 };
+
+type StatementPurchase = { ref: string; merchant: string; amount: number; currency: string; at: Date; snippet: string };
+
+// Bank rows that are moving money around rather than buying something.
+const NOT_A_PURCHASE = /\b(atm|cash withdrawal|transfer|trf|salary|loan|reversal|interest|charges?|fee|tax|levy)\b/i;
+
+/** One-off payments from a statement: everything paid out that is not part of a recurring payment. */
+async function storePurchases(userId: string, source: "mpesa" | "bank", rows: StatementPurchase[]) {
+  if (rows.length === 0) return 0;
+  const res = await prisma.purchase.createMany({
+    data: rows.map((r) => {
+      const merchant = displayName(cleanServiceName(r.merchant));
+      return {
+        userId,
+        source,
+        sourceRef: r.ref,
+        merchant,
+        merchantKey: serviceKey(merchant),
+        amount: r.amount,
+        currency: r.currency,
+        at: r.at,
+        snippet: r.snippet,
+      };
+    }),
+    skipDuplicates: true,
+  });
+  return res.count;
+}
 
 type StatementCharge = {
   ref: string;
@@ -153,7 +206,17 @@ export async function ingestStatement(userId: string, pdf: Uint8Array, kind: "mp
       })),
     );
     const newCharges = await storeCharges(userId, "mpesa", charges);
-    return { kind: "mpesa", reader: "mpesa", transactions: mpesa.length, recurring: recurring.length, newCharges };
+    // Paybill and till payments that do not repeat. Money sent to people is left out.
+    const inRecurring = new Set(recurring.flatMap((r) => r.txns.map((t) => t.receipt)));
+    const purchases = await storePurchases(
+      userId,
+      "mpesa",
+      mpesa.flatMap((t) => {
+        const cp = t.status === "Completed" && t.withdrawn > 0 && !inRecurring.has(t.receipt) ? counterpartyOf(t.details) : null;
+        return cp ? [{ ref: t.receipt, merchant: cp.name, amount: t.withdrawn, currency: "KES", at: t.at, snippet: t.details }] : [];
+      }),
+    );
+    return { kind: "mpesa", reader: "mpesa", transactions: mpesa.length, recurring: recurring.length, newCharges, purchases };
   }
 
   const { txns, reader } = await readBankStatement(text);
@@ -175,7 +238,15 @@ export async function ingestStatement(userId: string, pdf: Uint8Array, kind: "mp
     })),
   );
   const newCharges = await storeCharges(userId, "bank", charges);
-  return { kind: "bank", reader, transactions: txns.length, recurring: recurring.length, newCharges };
+  const inRecurring = new Set(recurring.flatMap((r) => r.txns.map((t) => t.ref)));
+  const purchases = await storePurchases(
+    userId,
+    "bank",
+    txns
+      .filter((t) => !inRecurring.has(t.ref) && !NOT_A_PURCHASE.test(t.description))
+      .map((t) => ({ ref: t.ref, merchant: t.payee, amount: t.amount, currency: t.currency, at: t.at, snippet: t.description })),
+  );
+  return { kind: "bank", reader, transactions: txns.length, recurring: recurring.length, newCharges, purchases };
 }
 
 async function storeCharges(userId: string, source: "mpesa" | "bank", charges: StatementCharge[]) {

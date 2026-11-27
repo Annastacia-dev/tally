@@ -8,6 +8,27 @@ import { fmtDate, TZ } from "@/lib/dates";
 import { convert, formatMoney } from "@/lib/money";
 import { dashboardData } from "@/lib/queries";
 import { brandColor } from "@/lib/services";
+import { PurchasesView } from "./Purchases";
+
+type Tab = "subscriptions" | "purchases";
+
+function Tabs({ tab }: { tab: Tab }) {
+  const item = (t: Tab, label: string) => (
+    <Link
+      href={t === "subscriptions" ? "/dashboard" : "/dashboard?tab=purchases"}
+      aria-current={tab === t ? "page" : undefined}
+      className={`rounded-lg px-4 py-1.5 text-sm font-bold transition ${tab === t ? "bg-ink text-paper" : "text-ink-2 hover:text-ink"}`}
+    >
+      {label}
+    </Link>
+  );
+  return (
+    <nav aria-label="Home views" className="inline-flex gap-1 rounded-xl border-2 border-edge bg-surface p-1 shadow-[3px_3px_0_var(--edge)]">
+      {item("subscriptions", "Subscriptions")}
+      {item("purchases", "Purchases")}
+    </nav>
+  );
+}
 
 const CYCLE_LABEL: Record<string, string> = {
   weekly: "/wk",
@@ -26,20 +47,34 @@ function relDays(d: Date, now: Date) {
   return `in ${n} days`;
 }
 
-export default async function Dashboard() {
+export default async function Dashboard({ searchParams }: PageProps<"/dashboard">) {
   const user = await requireUser();
   if (!user) redirect("/");
   const home = user.homeCurrency;
   const now = new Date();
+  const tab: Tab = (await searchParams).tab === "purchases" ? "purchases" : "subscriptions";
+
+  if (tab === "purchases") {
+    return (
+      <div className="space-y-5">
+        <Tabs tab={tab} />
+        <PurchasesView userId={user.id} home={home} now={now} />
+      </div>
+    );
+  }
+
   const data = await dashboardData(user.id, home, now);
 
   if (data.subs.length === 0) {
     return (
+      <div className="space-y-5">
+      <Tabs tab={tab} />
       <div className="card mx-auto mt-10 max-w-lg p-8 text-center">
         <div className="text-5xl" aria-hidden>🔍</div>
         <h1 className="mt-4 font-display text-2xl font-bold">Nothing tracked yet</h1>
         <p className="mt-2 text-ink-2">Scan your inbox or upload an M-Pesa statement and Tally will find your subscriptions.</p>
         <Link href="/sources" className="btn btn-primary mt-6">Find my subscriptions</Link>
+      </div>
       </div>
     );
   }
@@ -48,6 +83,7 @@ export default async function Dashboard() {
 
   return (
     <div className="space-y-5">
+      <Tabs tab={tab} />
       {data.pending > 0 && (
         <Link
           href="/review"
