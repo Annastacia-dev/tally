@@ -5,9 +5,16 @@ import { formatMoney } from "./money";
 
 // Daily job: email the user a few days before each renewal, once per renewal date.
 
+/** "Tally <noreply@example.com>" or a bare "noreply@example.com". */
+export function parseSender(value: string | undefined) {
+  const v = (value || "reminders@example.com").trim();
+  const m = v.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  return m ? { name: m[1].trim() || "Tally", email: m[2].trim() } : { name: "Tally", email: v };
+}
+
 export async function sendBrevoEmail(to: { email: string; name?: string | null }, subject: string, html: string) {
   const key = process.env.BREVO_API_KEY;
-  const sender = { email: process.env.REMINDER_FROM_EMAIL || "reminders@example.com", name: "Tally" };
+  const sender = parseSender(process.env.REMINDER_FROM_EMAIL);
   if (!key) {
     console.log(`[reminders] BREVO_API_KEY not set, would send to ${to.email}: ${subject}`);
     return { dryRun: true };

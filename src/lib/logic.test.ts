@@ -4,6 +4,7 @@ import { extractWithRules } from "./extract";
 import { cleanPayee, findBankRecurring, readBankWithRules } from "./bank";
 import { counterpartyOf, findRecurring, parseStatementText, pdfToText } from "./mpesa";
 import { sampleBankRows, sampleBankStatementPdf } from "@/fixtures/bank-statement";
+import { parseSender } from "./reminders";
 import { serviceKey } from "./services";
 import { fixtureEmails } from "@/fixtures/emails";
 
@@ -157,5 +158,14 @@ describe("mixed currencies", () => {
       { amount: 1100, currency: "KES", chargedAt: d(day.replace(/01$/, "05")), source: "bank" },
     ]);
     expect(inferSubscription(charges, d("2026-10-10"))).toMatchObject({ cycle: "monthly" });
+  });
+});
+
+describe("reminder sender", () => {
+  it("accepts a display name or a bare address", () => {
+    expect(parseSender("Tally <noreply@webcafe.africa>")).toEqual({ name: "Tally", email: "noreply@webcafe.africa" });
+    expect(parseSender('"Tally Reminders" <a@b.co>')).toEqual({ name: "Tally Reminders", email: "a@b.co" });
+    expect(parseSender("a@b.co")).toEqual({ name: "Tally", email: "a@b.co" });
+    expect(parseSender("")).toEqual({ name: "Tally", email: "reminders@example.com" });
   });
 });
