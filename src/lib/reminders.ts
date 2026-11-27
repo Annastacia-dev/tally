@@ -7,7 +7,7 @@ import { formatMoney } from "./money";
 
 export async function sendBrevoEmail(to: { email: string; name?: string | null }, subject: string, html: string) {
   const key = process.env.BREVO_API_KEY;
-  const sender = { email: process.env.REMINDER_FROM_EMAIL ?? "reminders@example.com", name: "Tally" };
+  const sender = { email: process.env.REMINDER_FROM_EMAIL || "reminders@example.com", name: "Tally" };
   if (!key) {
     console.log(`[reminders] BREVO_API_KEY not set, would send to ${to.email}: ${subject}`);
     return { dryRun: true };
@@ -34,7 +34,7 @@ export function reminderHtml(name: string, amount: string, date: Date, days: num
 }
 
 export async function runReminders(now = new Date()) {
-  const appUrl = process.env.APP_URL ?? process.env.AUTH_URL ?? "http://localhost:3000";
+  const appUrl = process.env.APP_URL || process.env.AUTH_URL || "http://localhost:3000";
   const users = await prisma.user.findMany({
     where: { remindersOn: true, email: { not: null } },
     include: { subscriptions: { where: { status: { not: "dismissed" }, possiblyCancelled: false, nextRenewalAt: { not: null } } } },

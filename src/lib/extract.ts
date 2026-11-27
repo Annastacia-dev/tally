@@ -26,7 +26,7 @@ export type EmailInput = {
   body: string;
 };
 
-export const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-5-5";
+export const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 
 const SYSTEM = `You read one email at a time from a person's inbox and extract subscription billing details.
 Only mark is_subscription_charge true for recurring services (streaming, music, apps, cloud storage, SaaS, gyms, internet, TV).

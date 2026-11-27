@@ -46,7 +46,7 @@ export async function scanInbox(): Promise<ActionResult> {
     if (useFixtures) {
       emails = fixtureEmails();
     } else {
-      const months = Number(process.env.SCAN_MONTHS ?? 18);
+      const months = Number(process.env.SCAN_MONTHS || 18);
       const { token, ids } = await listBillingMessageIds(user.id, months);
       emails = [];
       for (const id of ids) emails.push(await fetchEmail(token, id));
