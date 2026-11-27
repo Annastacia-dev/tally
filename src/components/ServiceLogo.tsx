@@ -15,7 +15,7 @@ export function ServiceLogo({ name, color, domain, size = 44 }: { name: string; 
   };
   return (
     <span
-      className="relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-2xl font-display font-bold text-white shadow-sm"
+      className="relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-2xl font-display font-bold text-white border-2 border-edge"
       style={{ width: size, height: size, background: color, fontSize: size * 0.42 }}
       aria-hidden
     >

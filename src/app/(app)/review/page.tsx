@@ -29,7 +29,7 @@ export default async function Review() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-bold">Review</h1>
+          <h1 className="page-title">Review</h1>
           <p className="text-ink-2">Check what Tally found, and add anything it missed.</p>
         </div>
         {groups[0].items.length > 1 && (

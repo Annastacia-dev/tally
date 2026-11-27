@@ -68,7 +68,7 @@
 }
 
 body {
-  background: var(--bg);
+  background: var(--paper);
   color: var(--ink);
 }
 
@@ -91,10 +91,12 @@ body {
 
 /* In the components layer so Tailwind utilities can override these. */
 @layer components {
+  /* Same bold outlined look as the landing page: dark edge, hard offset shadow. */
   .card {
     background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 1.5rem;
+    border: 2px solid var(--edge);
+    border-radius: 1.25rem;
+    box-shadow: 4px 4px 0 var(--edge);
   }
 
   .btn {
@@ -102,40 +104,54 @@ body {
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    border-radius: 999px;
-    padding: 0.65rem 1.1rem;
-    font-weight: 600;
+    border: 2px solid var(--edge);
+    border-radius: 0.8rem;
+    padding: 0.55rem 1rem;
+    font-weight: 700;
     font-size: 0.9rem;
-    transition: transform 120ms ease, background 120ms ease, opacity 120ms ease;
+    box-shadow: 3px 3px 0 var(--edge);
+    transition: transform 100ms ease, box-shadow 100ms ease, background 100ms ease;
   }
-  .btn:active { transform: scale(0.97); }
-  .btn:disabled { opacity: 0.6; }
+  .btn:hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--edge); }
+  .btn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--edge); }
+  .btn:disabled { opacity: 0.6; box-shadow: none; }
   .btn-primary { background: var(--accent); color: var(--accent-ink); }
-  .btn-primary:hover { filter: brightness(1.06); }
-  .btn-ghost { background: var(--surface-2); color: var(--ink); }
-  .btn-ghost:hover { background: var(--accent-soft); }
+  .btn-ghost { background: var(--surface); color: var(--ink); }
+  .btn-ghost:hover:not(:disabled) { background: var(--lime); color: #17142b; }
 
   .input {
     width: 100%;
-    background: var(--surface-2);
-    border: 1px solid var(--line);
-    border-radius: 0.9rem;
-    padding: 0.55rem 0.8rem;
+    background: var(--surface);
+    border: 2px solid var(--edge);
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.75rem;
     font-size: 0.95rem;
     color: var(--ink);
   }
-  .input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .input:focus { outline: none; box-shadow: 3px 3px 0 var(--accent); }
 
   .chip {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
+    border: 1.5px solid var(--edge);
     border-radius: 999px;
-    padding: 0.15rem 0.55rem;
+    padding: 0.1rem 0.55rem;
     font-size: 0.72rem;
-    font-weight: 600;
-    background: var(--surface-2);
-    color: var(--ink-2);
+    font-weight: 700;
+    background: var(--surface);
+    color: var(--ink);
+  }
+
+  /* Page titles in the app, matching the condensed landing headline. */
+  .page-title {
+    font-family: var(--font-bricolage), var(--font-display, sans-serif);
+    font-size: 2.5rem;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    font-stretch: 75%;
   }
 
   /* Bold outlined style used on the landing page: thick edge, hard offset shadow. */

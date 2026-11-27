@@ -25,7 +25,7 @@ export default async function Sources() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="font-display text-3xl font-bold">Sources</h1>
+        <h1 className="page-title">Sources</h1>
         <p className="text-ink-2">Where Tally looks for your subscriptions.</p>
       </div>
 
