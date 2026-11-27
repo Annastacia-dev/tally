@@ -7,7 +7,7 @@ import { fixtureEmails } from "@/fixtures/emails";
 import { addCycle, type Cycle } from "@/lib/cycles";
 import { prisma } from "@/lib/db";
 import { fetchEmail, listBillingMessageIds } from "@/lib/gmail";
-import { ingestEmails, ingestMpesa } from "@/lib/pipeline";
+import { ingestEmails, ingestStatement } from "@/lib/pipeline";
 import { runReminders } from "@/lib/reminders";
 import { displayName, serviceKey, serviceMeta } from "@/lib/services";
 
@@ -61,24 +61,29 @@ export async function scanInbox(): Promise<ActionResult> {
   }
 }
 
-export async function uploadMpesa(_: ActionResult | null, form: FormData): Promise<ActionResult> {
+export async function uploadStatement(_: ActionResult | null, form: FormData): Promise<ActionResult> {
   const user = await me();
   try {
     let bytes: Uint8Array;
-    if (form.get("sample") === "1") {
+    const sample = form.get("sample");
+    if (sample === "mpesa") {
       const { sampleStatementPdf } = await import("@/fixtures/mpesa-statement");
       bytes = new Uint8Array(await sampleStatementPdf());
+    } else if (sample === "bank") {
+      const { sampleBankStatementPdf } = await import("@/fixtures/bank-statement");
+      bytes = new Uint8Array(await sampleBankStatementPdf());
     } else {
       const file = form.get("statement");
       if (!(file instanceof File) || file.size === 0) return { ok: false, message: "Choose a PDF first." };
       bytes = new Uint8Array(await file.arrayBuffer());
     }
-    await prisma.scan.create({ data: { userId: user.id, kind: "mpesa", status: "done", finishedAt: new Date() } });
-    const res = await ingestMpesa(user.id, bytes);
+    const res = await ingestStatement(user.id, bytes);
+    await prisma.scan.create({ data: { userId: user.id, kind: res.kind, status: "done", finishedAt: new Date() } });
     refresh();
+    const what = res.kind === "mpesa" ? "M-Pesa statement" : "bank statement";
     return {
       ok: true,
-      message: `Read ${res.transactions} transactions and spotted ${res.recurring} recurring payments.`,
+      message: `Read your ${what}: ${res.transactions} payments out, ${res.recurring} recurring.`,
     };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : String(err) };

@@ -17,7 +17,7 @@ const CYCLE_LABEL: Record<string, string> = {
   unknown: "",
 };
 
-const SOURCE_LABEL: Record<string, string> = { email: "📧 Email", mpesa: "📱 M-Pesa", manual: "✍️ Manual" };
+const SOURCE_LABEL: Record<string, string> = { email: "📧 Email", mpesa: "📱 M-Pesa", bank: "🏦 Bank", manual: "✍️ Manual" };
 
 function relDays(d: Date, now: Date) {
   const n = daysBetween(now, d);

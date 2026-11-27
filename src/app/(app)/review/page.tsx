@@ -8,7 +8,7 @@ import { formatMoney } from "@/lib/money";
 import { brandColor } from "@/lib/services";
 import { confirmAll, setStatus } from "../../actions";
 
-const SOURCE_LABEL: Record<string, string> = { email: "📧 Email", mpesa: "📱 M-Pesa", manual: "✍️ Manual" };
+const SOURCE_LABEL: Record<string, string> = { email: "📧 Email", mpesa: "📱 M-Pesa", bank: "🏦 Bank", manual: "✍️ Manual" };
 
 export default async function Review() {
   const user = await requireUser();

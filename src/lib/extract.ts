@@ -35,7 +35,7 @@ If the email announces an upcoming renewal, use the renewal date as charge_date.
 If the email has no explicit date, use the email's sent date.`;
 
 let client: Anthropic | null = null;
-function anthropic() {
+export function anthropic() {
   client ??= new Anthropic();
   return client;
 }

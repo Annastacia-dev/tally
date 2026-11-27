@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
-import { MpesaUpload, RemindNow, ScanButton } from "@/components/SourceActions";
+import { StatementUpload, RemindNow, ScanButton } from "@/components/SourceActions";
 import { fmtDate } from "@/lib/dates";
 import { prisma } from "@/lib/db";
 import { hasClaude, MODEL } from "@/lib/extract";
@@ -15,7 +15,7 @@ export default async function Sources() {
     prisma.scan.findMany({ where: { userId: user.id }, orderBy: { startedAt: "desc" }, take: 5 }),
     prisma.account.findFirst({ where: { userId: user.id, provider: "google" } }),
   ]);
-  const lastEmail = scans.find((s) => s.kind !== "mpesa");
+  const lastEmail = scans.find((s) => s.kind === "gmail" || s.kind === "fixtures");
 
   return (
     <div className="space-y-5">
@@ -51,13 +51,20 @@ export default async function Sources() {
         <div className="flex items-start gap-4">
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-mint/20 text-2xl" aria-hidden>📱</span>
           <div className="flex-1">
-            <h2 className="font-display text-lg font-bold">M-Pesa statement</h2>
+            <h2 className="font-display text-lg font-bold">M-Pesa or bank statement</h2>
             <p className="text-sm text-ink-2">
-              Many Kenyan subscriptions have no email receipt. In the M-PESA app go to <b>Statements</b>, request a full statement as PDF, then
-              upload it here. We look for paybills and tills you pay on a regular schedule. Remove the PDF password first.
+              Many subscriptions have no email receipt. Upload a PDF statement and we look for payments you make on a regular schedule.
+              For M-Pesa, open the M-PESA app, go to <b>Statements</b> and request a full statement. For a bank or card account,
+              download a statement covering at least three months from your bank&apos;s app or website. Remove any PDF password first.
+            </p>
+            <p className="mt-1 text-xs text-ink-2">
+              M-Pesa statements are read on our server. Bank statements:{" "}
+              {hasClaude()
+                ? "the statement text is sent to Claude, which lists the payments out."
+                : "read with built-in rules (set ANTHROPIC_API_KEY to use Claude for any bank layout)."}
             </p>
             <div className="mt-4">
-              <MpesaUpload demo={user.isDemo} />
+              <StatementUpload demo={user.isDemo} />
             </div>
           </div>
         </div>

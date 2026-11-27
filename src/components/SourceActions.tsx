@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { scanInbox, sendRemindersNow, uploadMpesa, type ActionResult } from "@/app/actions";
+import { scanInbox, sendRemindersNow, uploadStatement, type ActionResult } from "@/app/actions";
 
 function Result({ r }: { r: ActionResult | null }) {
   if (!r) return null;
@@ -28,8 +28,8 @@ export function ScanButton({ label }: { label: string }) {
   );
 }
 
-export function MpesaUpload({ demo }: { demo: boolean }) {
-  const [state, action, pending] = useActionState<ActionResult | null, FormData>(uploadMpesa, null);
+export function StatementUpload({ demo }: { demo: boolean }) {
+  const [state, action, pending] = useActionState<ActionResult | null, FormData>(uploadStatement, null);
   return (
     <div>
       <form action={action} className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -42,12 +42,20 @@ export function MpesaUpload({ demo }: { demo: boolean }) {
         </button>
       </form>
       {demo && (
-        <form action={action} className="mt-2">
-          <input type="hidden" name="sample" value="1" />
-          <button className="text-sm font-semibold text-accent underline-offset-2 hover:underline" disabled={pending}>
-            or use the sample M-Pesa statement
-          </button>
-        </form>
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 text-sm">
+          <span className="text-ink-2">or try a sample:</span>
+          {[
+            ["mpesa", "M-Pesa statement"],
+            ["bank", "bank statement"],
+          ].map(([value, label]) => (
+            <form key={value} action={action}>
+              <input type="hidden" name="sample" value={value} />
+              <button className="font-semibold text-accent underline-offset-2 hover:underline" disabled={pending}>
+                {label}
+              </button>
+            </form>
+          ))}
+        </div>
       )}
       <Result r={state} />
     </div>

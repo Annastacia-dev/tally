@@ -1,4 +1,5 @@
-import { cycleFromGap, daysBetween, type Cycle } from "./cycles";
+import type { Cycle } from "./cycles";
+import { detectRecurring } from "./recurring";
 import { displayName, serviceKey } from "./services";
 
 // Parses the text of a Safaricom M-Pesa full statement and finds recurring
@@ -59,56 +60,44 @@ export function counterpartyOf(details: string): Counterparty | null {
   return null;
 }
 
-function median(xs: number[]) {
-  const s = [...xs].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-}
-
 export function findRecurring(txns: MpesaTxn[]): RecurringPayment[] {
-  const groups = new Map<string, { cp: Counterparty; txns: MpesaTxn[] }>();
-  for (const t of txns) {
-    if (t.status !== "Completed" || t.withdrawn <= 0) continue;
-    const cp = counterpartyOf(t.details);
-    if (!cp) continue;
-    const key = `${cp.kind}:${cp.number}:${cp.account ?? ""}`;
-    const g = groups.get(key) ?? { cp, txns: [] };
-    g.txns.push(t);
-    groups.set(key, g);
-  }
-
-  const results: RecurringPayment[] = [];
-  for (const { cp, txns: list } of groups.values()) {
-    if (list.length < 2) continue;
-    list.sort((a, b) => a.at.getTime() - b.at.getTime());
-
-    // Similar amounts: within 20% of the median.
-    const med = median(list.map((t) => t.withdrawn));
-    const similar = list.filter((t) => Math.abs(t.withdrawn - med) <= med * 0.2);
-    if (similar.length < 2) continue;
-
-    // Regular gaps that fit a known cycle.
-    const gaps = similar.slice(1).map((t, i) => daysBetween(similar[i].at, t.at));
-    const cycle = cycleFromGap(median(gaps));
-    if (cycle === "unknown") continue;
-    const fit = gaps.filter((g) => cycleFromGap(g) === cycle).length / gaps.length;
-    if (fit < 0.6) continue;
-
-    results.push({
+  const completed = txns.filter((t) => t.status === "Completed");
+  const groups = detectRecurring(completed, {
+    key: (t) => {
+      const cp = counterpartyOf(t.details);
+      return cp ? `${cp.kind}:${cp.number}:${cp.account ?? ""}` : null;
+    },
+    amount: (t) => t.withdrawn,
+    at: (t) => t.at,
+  });
+  return groups.map((g) => {
+    const cp = counterpartyOf(g.items[0].details)!;
+    return {
       counterparty: cp,
       serviceName: displayName(cp.name),
       serviceKey: serviceKey(cp.name),
-      cycle,
-      txns: similar,
-      confidence: Math.round((0.5 + 0.3 * fit + Math.min(0.2, similar.length * 0.04)) * 100) / 100,
-    });
-  }
-  return results;
+      cycle: g.cycle,
+      txns: g.items,
+      confidence: g.confidence,
+    };
+  });
 }
 
+/** Text of a statement PDF. Throws a readable error for locked or scanned files. */
 export async function pdfToText(data: Uint8Array): Promise<string> {
   const { extractText, getDocumentProxy } = await import("unpdf");
-  const pdf = await getDocumentProxy(data);
-  const { text } = await extractText(pdf, { mergePages: true });
+  let text: string;
+  try {
+    const pdf = await getDocumentProxy(data);
+    ({ text } = await extractText(pdf, { mergePages: true }));
+  } catch (err) {
+    if (err instanceof Error && /password/i.test(`${err.name} ${err.message}`)) {
+      throw new Error("This PDF is password protected. Open it, print it to a new PDF without the password, then upload that.");
+    }
+    throw new Error("Could not read this file. Is it a PDF statement?");
+  }
+  if (text.replace(/\s/g, "").length < 50) {
+    throw new Error("This PDF has no readable text (it may be a scan or photo). Download the statement as a PDF from your bank or the M-PESA app instead.");
+  }
   return text;
 }

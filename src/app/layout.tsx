@@ -9,7 +9,7 @@ const bricolage = Bricolage_Grotesque({ variable: "--font-bricolage", subsets: [
 
 export const metadata: Metadata = {
   title: "Tally: every subscription, tallied",
-  description: "Find every subscription in your inbox and M-Pesa statement, and get reminded before each renewal.",
+  description: "Find every subscription in your inbox, M-Pesa and bank statements, and get reminded before each renewal.",
 };
 
 export const viewport: Viewport = {

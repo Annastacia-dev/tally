@@ -1,6 +1,6 @@
 # Tally
 
-Tally finds every subscription you pay for, from your Gmail receipts and your M-Pesa statement, and emails you before each renewal.
+Tally finds every subscription you pay for, from your Gmail receipts and your M-Pesa or bank statements, and emails you before each renewal.
 
 For each subscription it shows what you pay, whether it is weekly, monthly or yearly, when it next renews, and your yearly total across everything.
 
@@ -12,11 +12,12 @@ For each subscription it shows what you pay, whether it is weekly, monthly or ye
 4. **Infer the pattern** (`src/lib/cycles.ts`): group charges by service, take the cycle from the gaps between charges, set next renewal to last charge plus one cycle, and mark a service "possibly cancelled" when an expected charge is overdue.
 5. **Review**: confirm, edit or dismiss what was found, and add anything missing by hand.
 6. **M-Pesa statement**: upload the PDF. Tally finds paybills and tills you pay on a regular schedule with similar amounts (`src/lib/mpesa.ts`) and merges them with the email results. The same payment seen in both places is counted once.
+7. **Bank statement**: upload the same way. Tally tells the two apart on its own. Bank layouts vary, so with `ANTHROPIC_API_KEY` set Claude lists the payments out (the statement text is sent to the Claude API). Without a key, a rule-based reader works out each debit from the running balance (`src/lib/bank.ts`). Both feed the same recurring detection (`src/lib/recurring.ts`).
 7. **Reminders**: a daily Vercel Cron job (`/api/cron/reminders`) emails you a few days before each renewal, through Brevo.
 
 ## Demo mode
 
-You can try everything without any credentials. In demo mode the app reads a built-in inbox (`src/fixtures/emails.ts`) and a generated sample M-Pesa statement (`src/fixtures/mpesa-statement.ts`). Fixture dates are relative to today, so the demo always looks current.
+You can try everything without any credentials. In demo mode the app reads a built-in inbox (`src/fixtures/emails.ts`) and generated sample M-Pesa and bank statements (`src/fixtures/mpesa-statement.ts`, `src/fixtures/bank-statement.ts`). Fixture dates are relative to today, so the demo always looks current.
 
 Demo mode is on when `DEMO_MODE=true`, or automatically when no Google client is configured. Without `ANTHROPIC_API_KEY`, emails go through a small rule-based extractor instead of Claude. Without `BREVO_API_KEY`, reminders are written to the server log instead of sent.
 
@@ -46,7 +47,7 @@ Generate `AUTH_SECRET` with `openssl rand -base64 32`.
 Checks:
 
 ```bash
-pnpm test     # unit tests for cycle inference, M-Pesa parsing and extraction
+pnpm test     # unit tests for cycle inference, M-Pesa and bank statement parsing, and extraction
 pnpm lint
 pnpm e2e      # drives the demo flow in a browser; needs `pnpm dev` running
 ```
@@ -131,6 +132,6 @@ src/
     mpesa.ts           statement parsing + recurring detection
     pipeline.ts        sources -> charges -> subscriptions
     reminders.ts       daily reminder job + Brevo
-  fixtures/            demo inbox and sample M-Pesa statement
+  fixtures/            demo inbox and sample M-Pesa and bank statements
 prisma/schema.prisma   data model
 ```

@@ -45,8 +45,8 @@ const STEPS = [
   {
     n: "02",
     bg: "bg-lime text-[#17142b]",
-    title: "Add your M-Pesa statement",
-    body: "Upload the PDF. Tally spots paybills and tills you pay on a schedule and merges them with what it found in email.",
+    title: "Add your M-Pesa or bank statement",
+    body: "Upload the PDF. Tally spots paybills, card payments and standing orders you pay on a schedule and merges them with what it found in email.",
   },
   {
     n: "03",
@@ -57,7 +57,7 @@ const STEPS = [
 ];
 
 const COMPARE = [
-  { what: "Finding subscriptions", without: "Digging through months of receipts", with: "Found in Gmail and M-Pesa for you" },
+  { what: "Finding subscriptions", without: "Digging through months of receipts", with: "Found in Gmail, M-Pesa and bank statements" },
   { what: "Renewals", without: "You notice once the money is gone", with: "An email a few days before" },
   { what: "Yearly cost", without: "A rough guess", with: "One total, in KES" },
   { what: "M-Pesa paybills", without: "Not tracked anywhere", with: "Regular paybills and tills detected" },
@@ -70,7 +70,7 @@ const PROMISES = [
     title: "Only what it needs",
     body: "Tally keeps the billing details and a short excerpt of each receipt, never a copy of your inbox.",
   },
-  { title: "Built for Kenya", body: "Totals in KES, M-Pesa support, and reminders timed for Nairobi." },
+  { title: "Built for Kenya", body: "Totals in KES, M-Pesa and bank statements, and reminders timed for Nairobi." },
 ];
 
 function SubCard({ s }: { s: Sample }) {
@@ -161,7 +161,7 @@ export default async function Landing() {
               <span className="nb mt-3 inline-block -rotate-2 rounded-2xl bg-accent px-4 pb-1 text-white">tallied.</span>
             </h1>
             <p className="mt-8 max-w-xl text-lg font-medium text-ink-2">
-              Tally reads your billing emails and M-Pesa statement, finds everything you pay for, and nudges you before
+              Tally reads your billing emails and your M-Pesa or bank statement, finds everything you pay for, and nudges you before
               each renewal.
             </p>
             <div className="mt-9 flex w-full justify-center">
