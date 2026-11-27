@@ -202,3 +202,17 @@ describe("prefilter", () => {
     expect(trimBody("See https://example.com/track?x=1 now")).toBe("See now");
   });
 });
+
+describe("one-off purchases", () => {
+  const email = (subject: string, body: string) => ({ id: "x", from: "Shop <a@b.c>", subject, date: "2026-11-01T09:00:00Z", body });
+  it("marks an order receipt as a purchase, not a subscription", () => {
+    const x = extractWithRules(email("Thank you for your order", "Item: Earbuds\nTotal paid: KES 2,450.00"));
+    expect(x.is_one_off_purchase).toBe(true);
+    expect(x.is_subscription_charge).toBe(false);
+  });
+  it("leaves subscriptions, shipping notices and promos alone", () => {
+    expect(extractWithRules(email("Your Netflix receipt", "Your subscription renewed. Amount: KES 1,100 monthly")).is_one_off_purchase).toBe(false);
+    expect(extractWithRules(email("Your order has shipped", "Order (KES 2,450) has shipped")).is_one_off_purchase).toBe(false);
+    expect(extractWithRules(email("50% off rides", "Sale ends Sunday, rides up to KES 300")).is_one_off_purchase).toBe(false);
+  });
+});

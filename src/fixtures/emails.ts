@@ -70,6 +70,24 @@ const TEMPLATES: Template[] = [
     body: () => `Good news! Your order #448812 (wireless earbuds, KES 2,450) has shipped and is out for delivery.`,
   },
   {
+    from: "Jumia <orders@jumia.co.ke>",
+    subject: "Thank you for your order",
+    daysAgo: [16],
+    body: (d) => `Hi Anna, we have received your order #448812 placed on ${d}.\nItem: Wireless earbuds\nTotal paid: KES 2,450.00 (M-Pesa)\nWe will let you know when it ships.`,
+  },
+  {
+    from: "Uber Receipts <noreply@uber.com>",
+    subject: "Your Tuesday evening trip with Uber",
+    daysAgo: [2, 9, 23],
+    body: (d) => `Thanks for riding, Anna.\nTrip on ${d}: Kilimani to Westlands\nTotal: KES 640.00\nPaid with M-Pesa. Here is your receipt.`,
+  },
+  {
+    from: "Glovo <receipts@glovoapp.com>",
+    subject: "Your Glovo order receipt",
+    daysAgo: [6, 34],
+    body: (d) => `Your order from Java House was delivered on ${d}.\nItems: Chicken tikka wrap, iced latte\nTotal paid: KES 1,180.00\nThanks for ordering with Glovo.`,
+  },
+  {
     from: "Spotify <no-reply@spotify.com>",
     subject: "Reset your password",
     daysAgo: [50],
