@@ -77,6 +77,24 @@ export function findKnownService(name: string): KnownService | undefined {
   return best?.svc;
 }
 
+// Words that describe the sender or the email, not the product.
+const SENDER_SUFFIX =
+  /\s+(billing team|billing|team|support|payments?|accounts?|receipts?|invoices?|notifications?|subscriptions?|renewals?|domains?|inc\.?|llc|ltd\.?|limited|pbc|corp\.?)$/i;
+
+/**
+ * "Supabase Billing Team" -> "Supabase",
+ * "Namecheap Domain Renewal (example.org)" -> "Namecheap".
+ */
+export function cleanServiceName(name: string): string {
+  let n = name.replace(/\s*\([^)]*\)\s*$/, "").replace(/[,.:;\s-]+$/, "").trim();
+  for (let i = 0; i < 3; i++) {
+    const next = n.replace(SENDER_SUFFIX, "").trim();
+    if (next === n || !next) break;
+    n = next;
+  }
+  return n || name.trim();
+}
+
 export function serviceKey(name: string): string {
   return findKnownService(name)?.key ?? (slug(name) || "unknown");
 }

@@ -94,6 +94,7 @@ When you sign in, Google warns that the app is unverified. Click **Continue**: t
 | `CRON_SECRET` | yes in production | Protects `/api/cron/reminders`. Vercel Cron sends it as a bearer token when it is set in the project. |
 | `APP_URL` | no | Link used in reminder emails. Defaults to `AUTH_URL`. |
 | `SCAN_MONTHS` | no | How far back to scan Gmail. Default 18. |
+| `SCAN_MAX_EMAILS` | no | Most new emails one scan reads. Default 1000. Emails already read are skipped, so the next scan continues further back. |
 | `FX_RATES_JSON` | no | KES per unit of other currencies, e.g. `{"USD":129.5}`. Totals are shown in KES. |
 | `APP_TIMEZONE` | no | Time zone for dates. Default `Africa/Nairobi`. |
 | `NEXT_PUBLIC_LOGOS` | no | `off` shows initials instead of loading logos from Google's favicon service. |

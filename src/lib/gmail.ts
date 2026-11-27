@@ -96,17 +96,23 @@ function bodyText(part: Part): string {
   return plain.length ? plain.join("\n") : htmlToText(html.join("\n"));
 }
 
-export async function listBillingMessageIds(userId: string, months = 18, max = 400) {
+/**
+ * Billing email ids, newest first, leaving out ones read in earlier scans.
+ * Each scan reads up to `max` new emails, so the next scan picks up where
+ * this one stopped and reaches further back.
+ */
+export async function listBillingMessageIds(userId: string, months = 18, max = 1000, skip = new Set<string>()) {
   const token = await accessToken(userId);
   const q = encodeURIComponent(gmailQuery(months));
   const ids: string[] = [];
   let pageToken = "";
-  while (ids.length < max) {
+  // Listing is cheap next to reading, but still cap it: 50 pages is 25,000 emails.
+  for (let pages = 0; ids.length < max && pages < 50; pages++) {
     const page = await gget<{ messages?: { id: string }[]; nextPageToken?: string }>(
       token,
-      `/messages?q=${q}&maxResults=100${pageToken ? `&pageToken=${pageToken}` : ""}`,
+      `/messages?q=${q}&maxResults=500${pageToken ? `&pageToken=${pageToken}` : ""}`,
     );
-    ids.push(...(page.messages ?? []).map((m) => m.id));
+    ids.push(...(page.messages ?? []).map((m) => m.id).filter((id) => !skip.has(id)));
     if (!page.nextPageToken) break;
     pageToken = page.nextPageToken;
   }

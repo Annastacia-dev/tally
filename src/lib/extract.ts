@@ -7,10 +7,14 @@ export const ExtractionSchema = z.object({
   is_subscription_charge: z
     .boolean()
     .describe("True only if this email confirms a payment, invoice or upcoming renewal for a recurring subscription."),
-  service_name: z.string().describe("The product being paid for, e.g. 'Netflix', 'Spotify Premium', 'iCloud+'. Empty if none."),
+  service_name: z
+    .string()
+    .describe(
+      "The brand or product being paid for, as the person would name it: 'Netflix', 'Supabase', 'Namecheap'. Not the sender or team ('Supabase Billing Team'), and no plan, domain or account details. Empty if none.",
+    ),
   amount: z.number().describe("Amount charged, as a plain number. 0 if unknown."),
   currency: z.string().describe("ISO 4217 code, e.g. KES, USD. Use KES for 'Ksh' or 'KSh'."),
-  plan: z.string().describe("Plan or tier name, empty string if not stated."),
+  plan: z.string().describe("Plan, tier or what is renewed, e.g. 'Pro', 'Premium Family', 'Domain: example.org'. Empty if not stated."),
   charge_date: z.string().describe("Date of the charge or renewal in YYYY-MM-DD."),
   billing_cycle: z.enum(["weekly", "monthly", "quarterly", "yearly", "unknown"]),
   confidence: z.number().describe("0 to 1: how sure you are about the fields above."),

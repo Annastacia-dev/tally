@@ -28,6 +28,7 @@ model User {
   charges          Charge[]
   subscriptions    Subscription[]
   scans            Scan[]
+  readEmails       ReadEmail[]
 }
 
 model Account {
@@ -121,7 +122,7 @@ model Subscription {
 model Scan {
   id         String    @id @default(cuid())
   userId     String
-  kind       String // "gmail" | "fixtures" | "mpesa"
+  kind       String // "gmail" | "fixtures" | "mpesa" | "bank"
   status     String    @default("running") // running | done | failed
   found      Int       @default(0)
   processed  Int       @default(0)
@@ -129,4 +130,15 @@ model Scan {
   startedAt  DateTime  @default(now())
   finishedAt DateTime?
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Gmail messages already read, so later scans only read new ones and reach
+// further back in the inbox.
+model ReadEmail {
+  userId    String
+  messageId String
+  readAt    DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, messageId])
 }

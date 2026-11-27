@@ -7,7 +7,7 @@ import { fixtureEmails } from "@/fixtures/emails";
 import { addCycle, type Cycle } from "@/lib/cycles";
 import { prisma } from "@/lib/db";
 import { fetchEmail, listBillingMessageIds } from "@/lib/gmail";
-import { ingestEmails, ingestStatement } from "@/lib/pipeline";
+import { alreadyRead, ingestEmails, ingestStatement } from "@/lib/pipeline";
 import { runReminders } from "@/lib/reminders";
 import { displayName, serviceKey, serviceMeta } from "@/lib/services";
 
@@ -48,7 +48,8 @@ export async function scanInbox(): Promise<ActionResult> {
       res = await ingestEmails(user.id, scan.id, [...emails.keys()], async (id) => emails.get(id)!);
     } else {
       const months = Number(process.env.SCAN_MONTHS || 18);
-      const { token, ids } = await listBillingMessageIds(user.id, months);
+      const max = Number(process.env.SCAN_MAX_EMAILS || 1000);
+      const { token, ids } = await listBillingMessageIds(user.id, months, max, await alreadyRead(user.id));
       res = await ingestEmails(user.id, scan.id, ids, (id) => fetchEmail(token, id));
     }
     refresh();
@@ -180,5 +181,6 @@ export async function resetData() {
   await prisma.charge.deleteMany({ where: { userId: user.id } });
   await prisma.subscription.deleteMany({ where: { userId: user.id } });
   await prisma.scan.deleteMany({ where: { userId: user.id } });
+  await prisma.readEmail.deleteMany({ where: { userId: user.id } });
   refresh();
 }

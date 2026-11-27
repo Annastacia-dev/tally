@@ -3,7 +3,7 @@ import { addCycle, inferSubscription, type Cycle } from "./cycles";
 import { extract, type EmailInput } from "./extract";
 import { findBankRecurring, readBankStatement } from "./bank";
 import { findRecurring, parseStatementText, pdfToText } from "./mpesa";
-import { displayName, serviceKey, serviceMeta } from "./services";
+import { cleanServiceName, displayName, serviceKey, serviceMeta } from "./services";
 
 // Glue between sources (email, M-Pesa, bank) and the Subscription table.
 
@@ -28,16 +28,23 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
   return out;
 }
 
+/** Emails already read for this user: stored charges plus everything a scan has read. */
+export async function alreadyRead(userId: string) {
+  const [charges, read] = await Promise.all([
+    prisma.charge.findMany({ where: { userId, source: "email" }, select: { sourceRef: true } }),
+    prisma.readEmail.findMany({ where: { userId }, select: { messageId: true } }),
+  ]);
+  return new Set([...charges.map((c) => c.sourceRef), ...read.map((r) => r.messageId)]);
+}
+
 /**
  * Load each email, run extraction and store the subscription charges we find.
  * Emails are loaded and extracted a few at a time, so a scan that stops part
  * way (for example on a Gmail rate limit) keeps what it already found.
  */
 export async function ingestEmails(userId: string, scanId: string, ids: string[], load: (id: string) => Promise<EmailInput>) {
-  // Skip emails we already stored a charge for, before spending quota on them.
-  const seen = new Set(
-    (await prisma.charge.findMany({ where: { userId, source: "email" }, select: { sourceRef: true } })).map((c) => c.sourceRef),
-  );
+  // Skip emails read in earlier scans, before spending quota on them.
+  const seen = await alreadyRead(userId);
   const todo = ids.filter((id) => !seen.has(id));
   await prisma.scan.update({ where: { id: scanId }, data: { found: ids.length } });
 
@@ -47,6 +54,7 @@ export async function ingestEmails(userId: string, scanId: string, ids: string[]
     await mapLimit(todo, 4, async (id) => {
       const email = await load(id);
       const x = await extract(email);
+      await prisma.readEmail.createMany({ data: [{ userId, messageId: id }], skipDuplicates: true });
     processed++;
     if (processed % 5 === 0) await prisma.scan.update({ where: { id: scanId }, data: { processed } });
     if (!x || !x.is_subscription_charge || !x.service_name || x.amount <= 0 || x.confidence < MIN_CONFIDENCE) return;
@@ -57,8 +65,8 @@ export async function ingestEmails(userId: string, scanId: string, ids: string[]
         userId,
         source: "email",
         sourceRef: email.id,
-        serviceName: displayName(x.service_name),
-        serviceKey: serviceKey(x.service_name),
+        serviceName: displayName(cleanServiceName(x.service_name)),
+        serviceKey: serviceKey(cleanServiceName(x.service_name)),
         amount: x.amount,
         currency: x.currency.toUpperCase(),
         plan: x.plan || null,

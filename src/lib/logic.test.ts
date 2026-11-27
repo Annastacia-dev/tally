@@ -5,7 +5,7 @@ import { cleanPayee, findBankRecurring, readBankWithRules } from "./bank";
 import { counterpartyOf, findRecurring, parseStatementText, pdfToText } from "./mpesa";
 import { sampleBankRows, sampleBankStatementPdf } from "@/fixtures/bank-statement";
 import { parseSender } from "./reminders";
-import { serviceKey } from "./services";
+import { cleanServiceName, serviceKey } from "./services";
 import { fixtureEmails } from "@/fixtures/emails";
 
 const NOW = new Date("2026-11-27T09:00:00Z");
@@ -167,5 +167,16 @@ describe("reminder sender", () => {
     expect(parseSender('"Tally Reminders" <a@b.co>')).toEqual({ name: "Tally Reminders", email: "a@b.co" });
     expect(parseSender("a@b.co")).toEqual({ name: "Tally", email: "a@b.co" });
     expect(parseSender("")).toEqual({ name: "Tally", email: "reminders@example.com" });
+  });
+});
+
+describe("service name cleanup", () => {
+  it("drops sender words and trailing details", () => {
+    expect(cleanServiceName("Supabase Billing Team")).toBe("Supabase");
+    expect(cleanServiceName("Namecheap Domain Renewal (diversifiedke.org)")).toBe("Namecheap");
+    expect(cleanServiceName("Acme Inc.")).toBe("Acme");
+    expect(cleanServiceName("YouTube Premium")).toBe("YouTube Premium");
+    expect(cleanServiceName("Microsoft Teams")).toBe("Microsoft Teams");
+    expect(cleanServiceName("Billing")).toBe("Billing");
   });
 });
