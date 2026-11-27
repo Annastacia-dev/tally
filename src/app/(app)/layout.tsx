@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
 import { DesktopNav, MobileNav } from "@/components/Nav";
@@ -15,6 +16,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     <div className="min-h-dvh pb-28 md:pb-12">
       <header className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <Link href="/dashboard" className="font-display text-xl font-bold">
+          <Image src="/logo.svg" alt="" unoptimized width={28} height={28} className="mr-1.5 inline-block h-7 w-7 align-[-0.3em]" />
           tally<span className="text-accent">.</span>
         </Link>
         <DesktopNav pending={pending} />
